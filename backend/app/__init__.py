@@ -27,11 +27,13 @@ def create_app(config_name: str | None = None) -> Flask:
     from backend.app.api.users.routes import bp as users_bp
     from backend.app.api.organizations.routes import bp as organizations_bp
     from backend.app.api.teams.routes import bp as teams_bp
+    from backend.app.api.projects.routes import bp as projects_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(users_bp)
     app.register_blueprint(organizations_bp)
     app.register_blueprint(teams_bp)
+    app.register_blueprint(projects_bp)
 
     @app.errorhandler(404)
     def not_found_error(error):

@@ -26,6 +26,7 @@ class Organization(db.Model):
     memberships: Mapped[list["OrganizationMembership"]] = relationship(back_populates="organization", cascade="all, delete-orphan")
     teams: Mapped[list["Team"]] = relationship(back_populates="organization", cascade="all, delete-orphan")
     roles: Mapped[list["Role"]] = relationship(back_populates="organization", cascade="all, delete-orphan")
+    projects: Mapped[list["Project"]] = relationship(back_populates="organization", cascade="all, delete-orphan")
 
     def to_dict(self) -> dict[str, Any]:
         return {

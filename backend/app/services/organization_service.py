@@ -2,6 +2,7 @@ import uuid
 from typing import Any
 
 from backend.app import db
+from backend.app.utils.uuid_helpers import parse_uuid
 from backend.app.models.organization import Organization, OrganizationMembership, Permission, Role, RolePermission
 from backend.app.models.team import Team, TeamMembership
 from backend.app.models.user import User
@@ -191,7 +192,17 @@ class OrganizationService:
             raise ValueError("Role not found")
         if self._normalize_role_name(role_name) == "Organization Owner":
             raise ValueError("Cannot assign organization owner")
-        membership = OrganizationMembership(organization_id=organization_id, user_id=target_user.id, role_id=role.id, status="active", invited_by=acting_user_id)
+        parsed_org_id = parse_uuid(organization_id)
+        parsed_acting_id = parse_uuid(acting_user_id)
+        if not parsed_org_id:
+            raise ValueError("Invalid organization")
+        membership = OrganizationMembership(
+            organization_id=parsed_org_id,
+            user_id=target_user.id,
+            role_id=role.id,
+            status="active",
+            invited_by=parsed_acting_id,
+        )
         self.organization_repository.create_membership(membership)
         db.session.commit()
         return membership.to_dict()
@@ -242,7 +253,13 @@ class OrganizationService:
         name = (payload.get("name") or "").strip()
         if not name:
             raise ValueError("Name is required")
-        team = Team(organization_id=organization.id, name=name, description=(payload.get("description") or "").strip() or None, lead_user_id=payload.get("lead_user_id") or None)
+        lead_user_id = parse_uuid(payload.get("lead_user_id")) if payload.get("lead_user_id") else None
+        team = Team(
+            organization_id=organization.id,
+            name=name,
+            description=(payload.get("description") or "").strip() or None,
+            lead_user_id=lead_user_id,
+        )
         self.team_repository.create(team)
         db.session.commit()
         return team.to_dict()
@@ -277,7 +294,7 @@ class OrganizationService:
         if "description" in payload:
             team.description = payload.get("description")
         if "lead_user_id" in payload:
-            team.lead_user_id = payload.get("lead_user_id")
+            team.lead_user_id = parse_uuid(payload.get("lead_user_id"))
         self.team_repository.update(team)
         return team.to_dict()
 

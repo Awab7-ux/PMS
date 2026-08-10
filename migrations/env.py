@@ -15,7 +15,7 @@ if config.config_file_name is not None:
 config.set_main_option("script_location", os.path.abspath(os.path.dirname(__file__)))
 
 from backend.app import db
-from backend.app.models import User
+from backend.app.models import User, Organization, Team, Project
 
 target_metadata = db.metadata
 
