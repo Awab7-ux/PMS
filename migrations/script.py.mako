@@ -1,7 +1,7 @@
 """${message}
 
 Revision ID: ${up_revision}
-Revises: ${down_revision | comma,nothing}
+Revises: ${down_revision | repr}
 Create Date: ${create_date}
 
 """
@@ -16,9 +16,9 @@ branch_labels = ${repr(branch_labels)}
 depends_on = ${repr(depends_on)}
 
 
-def upgrade() -> None:
+def upgrade():
     ${upgrades if upgrades else "pass"}
 
 
-def downgrade() -> None:
-    ${down_revision if down_revision else "pass"}
+def downgrade():
+    ${downgrades if downgrades else "pass"}

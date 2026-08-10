@@ -1,0 +1,78 @@
+.layout { display: flex; min-height: 100vh; }
+
+.sidebar {
+  width: var(--sidebar-width);
+  background: var(--bg-card);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  top: 0; left: 0; bottom: 0;
+  z-index: 100;
+  transition: transform 0.2s;
+}
+
+.sidebar-brand {
+  display: flex; align-items: center; gap: 12px;
+  padding: 20px 24px; font-size: 1.25rem; font-weight: 700;
+  border-bottom: 1px solid var(--border);
+}
+.brand-icon {
+  width: 36px; height: 36px; background: var(--primary);
+  border-radius: 8px; display: flex; align-items: center; justify-content: center;
+  color: white; font-weight: 800;
+}
+
+.sidebar-org {
+  padding: 12px 24px; font-size: 0.8rem; color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+}
+
+.sidebar-nav {
+  flex: 1; padding: 12px; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.sidebar-nav a {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 16px; border-radius: var(--radius);
+  color: var(--text-muted); transition: all 0.15s;
+}
+.sidebar-nav a:hover { background: var(--bg-hover); color: var(--text); }
+.sidebar-nav a.active { background: rgba(99,102,241,0.15); color: var(--primary); font-weight: 500; }
+
+.nav-badge {
+  margin-left: auto; background: var(--danger); color: white;
+  font-size: 0.7rem; padding: 2px 8px; border-radius: 999px;
+}
+
+.layout-main {
+  flex: 1; margin-left: var(--sidebar-width);
+  display: flex; flex-direction: column; min-width: 0;
+}
+
+.header {
+  height: var(--header-height);
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 24px; position: sticky; top: 0; z-index: 50;
+}
+
+.header-right { display: flex; align-items: center; gap: 16px; }
+.user-name { color: var(--text-muted); font-size: 0.875rem; }
+.menu-toggle { display: none; }
+
+.content { flex: 1; padding: 24px; }
+
+.sidebar-backdrop { display: none; }
+
+@media (max-width: 768px) {
+  .sidebar { transform: translateX(-100%); }
+  .sidebar.open { transform: translateX(0); }
+  .layout-main { margin-left: 0; }
+  .menu-toggle { display: inline-flex; }
+  .sidebar-backdrop {
+    display: block; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.5); z-index: 99;
+  }
+}

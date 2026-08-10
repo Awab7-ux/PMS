@@ -46,6 +46,8 @@ class Project(db.Model):
     organization: Mapped["Organization"] = relationship(back_populates="projects")
     owner: Mapped["User"] = relationship(foreign_keys=[owner_user_id])
     memberships: Mapped[list["ProjectMembership"]] = relationship(back_populates="project", cascade="all, delete-orphan")
+    tasks: Mapped[list["Task"]] = relationship(back_populates="project", cascade="all, delete-orphan")
+    tags: Mapped[list["TaskTag"]] = relationship(back_populates="project", cascade="all, delete-orphan")
 
     def to_dict(self) -> dict[str, Any]:
         return {

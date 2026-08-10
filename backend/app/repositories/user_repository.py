@@ -27,3 +27,6 @@ class UserRepository:
     def update(self, user: User) -> User:
         db.session.commit()
         return user
+
+    def list_all(self) -> list[User]:
+        return db.session.execute(db.select(User).where(User.deleted_at.is_(None))).scalars().all()

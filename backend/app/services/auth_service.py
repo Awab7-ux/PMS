@@ -7,15 +7,18 @@ from flask import current_app
 from flask_jwt_extended import create_access_token, create_refresh_token, decode_token
 from werkzeug.security import check_password_hash, generate_password_hash
 
+from backend.app import db
+from backend.app.models.token import AuthToken
 from backend.app.models.user import User
+from backend.app.repositories.token_repository import TokenRepository
 from backend.app.repositories.user_repository import UserRepository
+from backend.app.utils.uuid_helpers import parse_uuid
 
 
 class AuthService:
-    def __init__(self, repository: UserRepository | None = None):
+    def __init__(self, repository: UserRepository | None = None, token_repository: TokenRepository | None = None):
         self.repository = repository or UserRepository()
-        self._reset_tokens: dict[str, tuple[str, datetime]] = {}
-        self._verification_tokens: dict[str, tuple[str, datetime]] = {}
+        self.token_repository = token_repository or TokenRepository()
         self._revoked_tokens: set[str] = set()
 
     @staticmethod
@@ -35,6 +38,31 @@ class AuthService:
     def validate_email(email: str) -> None:
         if "@" not in email or "." not in email:
             raise ValueError("Invalid email address")
+
+    def _create_token(self, user_id: str, token_type: str, expires_delta: timedelta) -> str:
+        token_value = secrets.token_urlsafe(32)
+        auth_token = AuthToken(
+            user_id=parse_uuid(user_id),
+            token=token_value,
+            token_type=token_type,
+            expires_at=datetime.now(timezone.utc) + expires_delta,
+        )
+        self.token_repository.create(auth_token)
+        db.session.commit()
+        return token_value
+
+    def _consume_token(self, token_value: str, token_type: str) -> str | None:
+        entry = self.token_repository.get_by_token(token_value, token_type)
+        if not entry:
+            return None
+        expires_at = entry.expires_at
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if expires_at < datetime.now(timezone.utc):
+            return None
+        self.token_repository.mark_used(entry)
+        db.session.commit()
+        return str(entry.user_id)
 
     def register(self, payload: dict[str, Any]) -> dict[str, Any]:
         email = (payload.get("email") or "").strip().lower()
@@ -61,8 +89,7 @@ class AuthService:
         )
         self.repository.create(user)
 
-        token = secrets.token_urlsafe(24)
-        self._verification_tokens[token] = (str(user.id), datetime.now(timezone.utc) + timedelta(hours=24))
+        token = self._create_token(str(user.id), "email_verification", timedelta(hours=24))
         return {"user": user.to_dict(), "verification_token": token}
 
     def login(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -121,20 +148,14 @@ class AuthService:
         if not user:
             return {"message": "If an account exists, a reset link has been sent."}
 
-        token = secrets.token_urlsafe(24)
-        self._reset_tokens[token] = (str(user.id), datetime.now(timezone.utc) + timedelta(minutes=15))
+        token = self._create_token(str(user.id), "password_reset", timedelta(minutes=15))
         return {"message": "If an account exists, a reset link has been sent.", "reset_token": token}
 
     def reset_password(self, token: str, new_password: str) -> dict[str, Any]:
         self.validate_password(new_password)
 
-        entry = self._reset_tokens.get(token)
-        if not entry:
-            raise ValueError("Invalid or expired reset token")
-
-        user_id, expires_at = entry
-        if expires_at < datetime.now(timezone.utc):
-            del self._reset_tokens[token]
+        user_id = self._consume_token(token, "password_reset")
+        if not user_id:
             raise ValueError("Invalid or expired reset token")
 
         user = self.repository.get_by_id(user_id)
@@ -143,17 +164,11 @@ class AuthService:
 
         user.password_hash = generate_password_hash(new_password)
         self.repository.update(user)
-        del self._reset_tokens[token]
         return {"message": "Password reset successful."}
 
     def verify_email(self, token: str) -> dict[str, Any]:
-        entry = self._verification_tokens.get(token)
-        if not entry:
-            raise ValueError("Invalid or expired verification token")
-
-        user_id, expires_at = entry
-        if expires_at < datetime.now(timezone.utc):
-            del self._verification_tokens[token]
+        user_id = self._consume_token(token, "email_verification")
+        if not user_id:
             raise ValueError("Invalid or expired verification token")
 
         user = self.repository.get_by_id(user_id)
@@ -162,7 +177,6 @@ class AuthService:
 
         user.is_active = True
         self.repository.update(user)
-        del self._verification_tokens[token]
         return {"message": "Email verified successfully."}
 
     def get_current_user(self, user_id: str) -> dict[str, Any]:

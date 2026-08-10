@@ -104,8 +104,10 @@ class OrganizationService:
 
         organization = Organization(name=name, slug=slug, description=description, industry=industry)
         self.organization_repository.create(organization)
-        owner_role, _, _, _ = self._ensure_default_roles(organization)
-        self._ensure_permissions(owner_role)
+        from backend.app.services.rbac_service import RBACService
+        rbac = RBACService()
+        roles = rbac.ensure_default_roles(organization.id)
+        owner_role = roles["Organization Owner"]
         membership = OrganizationMembership(
             organization_id=organization.id,
             user_id=creator.id,
@@ -351,3 +353,37 @@ class OrganizationService:
             raise ValueError("Member not found")
         self.team_repository.remove_membership(membership)
         return {"message": "Member removed"}
+
+    def list_team_members(self, user_id: str, team_id: str) -> list[dict[str, Any]]:
+        team = self.team_repository.get_by_id(team_id)
+        if not team or not team.is_active:
+            raise ValueError("Team not found")
+        membership = self.organization_repository.get_membership(team.organization_id, user_id)
+        if not membership or membership.status != "active":
+            raise PermissionError("Access denied")
+        memberships = self.team_repository.list_memberships(team.id)
+        result = []
+        for m in memberships:
+            data = m.to_dict()
+            if m.user:
+                data["user"] = m.user.to_dict()
+            result.append(data)
+        return result
+
+    def update_team_member(self, acting_user_id: str, team_id: str, user_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        team = self.team_repository.get_by_id(team_id)
+        if not team or not team.is_active:
+            raise ValueError("Team not found")
+        acting_membership = self.organization_repository.get_membership(team.organization_id, acting_user_id)
+        if not acting_membership or acting_membership.status != "active":
+            raise PermissionError("Access denied")
+        if acting_membership.role.name not in {"Organization Owner", "Project Manager"}:
+            raise PermissionError("Insufficient permissions")
+        membership = self.team_repository.get_membership(team.id, user_id)
+        if not membership:
+            raise ValueError("Member not found")
+        if "role_in_team" in payload:
+            membership.role_in_team = payload["role_in_team"]
+        self.team_repository.update_membership(membership)
+        db.session.commit()
+        return membership.to_dict()

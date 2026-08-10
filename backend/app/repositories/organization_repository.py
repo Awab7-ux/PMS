@@ -186,3 +186,7 @@ class TeamRepository:
     def remove_membership(self, membership: TeamMembership) -> None:
         db.session.delete(membership)
         db.session.flush()
+
+    def update_membership(self, membership: TeamMembership) -> TeamMembership:
+        db.session.flush()
+        return membership

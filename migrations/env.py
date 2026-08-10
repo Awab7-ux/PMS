@@ -9,13 +9,33 @@ from flask import current_app
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 config = context.config
-if config.config_file_name is not None:
+if config.config_file_name is not None and os.path.isfile(config.config_file_name):
     fileConfig(config.config_file_name)
 
 config.set_main_option("script_location", os.path.abspath(os.path.dirname(__file__)))
 
 from backend.app import db
-from backend.app.models import User, Organization, Team, Project
+from backend.app.models import (
+    User,
+    Organization,
+    OrganizationMembership,
+    Role,
+    Permission,
+    RolePermission,
+    Team,
+    TeamMembership,
+    Project,
+    ProjectMembership,
+    Task,
+    Subtask,
+    TaskTag,
+    TaskTagAssociation,
+    Comment,
+    FileAttachment,
+    Notification,
+    ActivityLog,
+    AuthToken,
+)
 
 target_metadata = db.metadata
 

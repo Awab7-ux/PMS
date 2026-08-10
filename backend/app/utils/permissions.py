@@ -1,0 +1,87 @@
+"""Permission codes and default role mappings for RBAC."""
+
+ALL_PERMISSIONS = [
+    "organization.read",
+    "organization.update",
+    "organization.delete",
+    "member.invite",
+    "member.remove",
+    "project.create",
+    "project.read",
+    "project.update",
+    "project.delete",
+    "task.create",
+    "task.read",
+    "task.update",
+    "task.delete",
+    "task.assign",
+    "comment.create",
+    "comment.update",
+    "comment.delete",
+    "file.upload",
+    "file.delete",
+    "report.view",
+    "admin.manage_users",
+]
+
+DEFAULT_ROLES = [
+    "Super Admin",
+    "Organization Owner",
+    "Organization Admin",
+    "Project Manager",
+    "Team Lead",
+    "Team Member",
+    "Viewer",
+    "Client",
+]
+
+ROLE_PERMISSIONS: dict[str, list[str]] = {
+    "Super Admin": ALL_PERMISSIONS,
+    "Organization Owner": ALL_PERMISSIONS,
+    "Organization Admin": [
+        "organization.read", "organization.update",
+        "member.invite", "member.remove",
+        "project.create", "project.read", "project.update", "project.delete",
+        "task.create", "task.read", "task.update", "task.delete", "task.assign",
+        "comment.create", "comment.update", "comment.delete",
+        "file.upload", "file.delete",
+        "report.view", "admin.manage_users",
+    ],
+    "Project Manager": [
+        "organization.read",
+        "member.invite",
+        "project.create", "project.read", "project.update",
+        "task.create", "task.read", "task.update", "task.delete", "task.assign",
+        "comment.create", "comment.update", "comment.delete",
+        "file.upload", "file.delete",
+        "report.view",
+    ],
+    "Team Lead": [
+        "organization.read",
+        "project.read",
+        "task.create", "task.read", "task.update", "task.assign",
+        "comment.create", "comment.update",
+        "file.upload",
+        "report.view",
+    ],
+    "Team Member": [
+        "organization.read",
+        "project.read",
+        "task.create", "task.read", "task.update",
+        "comment.create", "comment.update",
+        "file.upload",
+    ],
+    "Viewer": [
+        "organization.read",
+        "project.read",
+        "task.read",
+        "comment.create",
+        "report.view",
+    ],
+    "Client": [
+        "organization.read",
+        "project.read",
+        "task.read",
+        "comment.create",
+    ],
+}
