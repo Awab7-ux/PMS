@@ -13,6 +13,7 @@ const NAV = [
   { to: '/reports', label: 'Reports', icon: '📈' },
   { to: '/notifications', label: 'Notifications', icon: '🔔' },
   { to: '/activity', label: 'Activity', icon: '📋' },
+  { to: '/users', label: 'Users', icon: '👤' },
   { to: '/settings', label: 'Settings', icon: '⚙️' },
 ];
 
@@ -21,6 +22,7 @@ export default function MainLayout() {
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [unread, setUnread] = useState(0);
+  const [searchQ, setSearchQ] = useState('');
 
   useEffect(() => {
     notificationApi.unreadCount().then(r => setUnread(r.data?.count || 0)).catch(() => {});
@@ -29,6 +31,11 @@ export default function MainLayout() {
   const handleLogout = async () => {
     await logout();
     navigate('/login');
+  };
+
+  const handleSearch = (e) => {
+    e.preventDefault();
+    if (searchQ.trim()) navigate(`/search?q=${encodeURIComponent(searchQ.trim())}`);
   };
 
   return (
@@ -55,17 +62,23 @@ export default function MainLayout() {
 
       <div className="layout-main">
         <header className="header">
-          <button className="menu-toggle btn btn-secondary btn-sm" onClick={() => setSidebarOpen(!sidebarOpen)}>☰</button>
+          <button type="button" className="menu-toggle btn btn-secondary btn-sm" onClick={() => setSidebarOpen(!sidebarOpen)} aria-label="Toggle menu">☰</button>
+          <form onSubmit={handleSearch} className="header-search">
+            <input className="input" placeholder="Search..." value={searchQ} onChange={e => setSearchQ(e.target.value)} aria-label="Global search" />
+          </form>
           <div className="header-right">
+            <NavLink to="/notifications" className="header-notif" aria-label="Notifications">
+              🔔 {unread > 0 && <span className="nav-badge">{unread}</span>}
+            </NavLink>
             <span className="user-name">{user?.full_name}</span>
-            <button className="btn btn-secondary btn-sm" onClick={handleLogout}>Logout</button>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={handleLogout}>Logout</button>
           </div>
         </header>
         <main className="content">
           <Outlet />
         </main>
       </div>
-      {sidebarOpen && <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />}
+      {sidebarOpen && <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} role="presentation" />}
     </div>
   );
 }

@@ -125,9 +125,36 @@ export const notificationApi = {
 };
 
 export const teamApi = {
-  list: (orgId) => apiRequest(`/teams?organization_id=${orgId}`),
+  list: () => apiRequest('/teams'),
   create: (data) => apiRequest('/teams', { method: 'POST', body: JSON.stringify(data) }),
   get: (id) => apiRequest(`/teams/${id}`),
+  update: (id, data) => apiRequest(`/teams/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  delete: (id) => apiRequest(`/teams/${id}`, { method: 'DELETE' }),
+  addMember: (teamId, data) => apiRequest(`/teams/${teamId}/members`, { method: 'POST', body: JSON.stringify(data) }),
+  removeMember: (teamId, userId) => apiRequest(`/teams/${teamId}/members/${userId}`, { method: 'DELETE' }),
+};
+
+export const fileApi = {
+  list: (params) => apiRequest(`/files?${new URLSearchParams(params)}`),
+  upload: async (file, meta = {}) => {
+    const { access } = getTokens();
+    const form = new FormData();
+    form.append('file', file);
+    if (meta.task_id) form.append('task_id', meta.task_id);
+    if (meta.project_id) form.append('project_id', meta.project_id);
+    const res = await fetch(`${API_BASE}/files/upload`, {
+      method: 'POST',
+      headers: access ? { Authorization: `Bearer ${access}` } : {},
+      body: form,
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || json.success === false) {
+      throw new ApiError(json.message || 'Upload failed', res.status, json);
+    }
+    return json;
+  },
+  downloadUrl: (fileId) => `${API_BASE}/files/${fileId}/download`,
+  delete: (id) => apiRequest(`/files/${id}`, { method: 'DELETE' }),
 };
 
 export const reportApi = {

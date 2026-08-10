@@ -65,4 +65,22 @@ def create_app(config_name: str | None = None) -> Flask:
     def health():
         return jsonify({"status": "ok", "service": "pms-backend"})
 
+    @app.route("/api/v1/openapi.yaml")
+    def openapi_spec():
+        spec_path = os.path.join(app.root_path, "..", "..", "docs", "openapi.yaml")
+        spec_path = os.path.normpath(spec_path)
+        if not os.path.isfile(spec_path):
+            return jsonify({"error": "OpenAPI spec not found"}), 404
+        with open(spec_path, encoding="utf-8") as f:
+            from flask import Response
+            return Response(f.read(), mimetype="application/yaml")
+
+    @app.route("/api/v1/docs")
+    def api_docs():
+        return jsonify({
+            "openapi": "/api/v1/openapi.yaml",
+            "swagger_ui": "Import openapi.yaml into Swagger Editor or Postman",
+            "health": "/api/v1/health",
+        })
+
     return app

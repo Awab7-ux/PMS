@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { reportApi, projectApi, taskApi, notificationApi } from '../services/api';
+import { reportApi, projectApi, notificationApi } from '../services/api';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+
+const COLORS = ['#6366f1', '#22c55e', '#f59e0b', '#ef4444', '#3b82f6'];
 
 export default function DashboardPage() {
   const { orgId } = useAuth();
@@ -24,6 +27,15 @@ export default function DashboardPage() {
   }, [orgId]);
 
   if (loading) return <div className="loader">Loading dashboard...</div>;
+
+  const statusData = Object.entries(stats?.tasks_by_status || {}).map(([name, value]) => ({
+    name: name.replace('_', ' '),
+    value,
+  }));
+  const priorityData = Object.entries(stats?.tasks_by_priority || {}).map(([name, value]) => ({
+    name,
+    value,
+  }));
 
   return (
     <div>
@@ -50,6 +62,39 @@ export default function DashboardPage() {
         <div className="card stat-card">
           <div className="value">{stats?.overdue_tasks ?? 0}</div>
           <div className="label">Overdue Tasks</div>
+        </div>
+      </div>
+
+      <div className="grid-2" style={{ marginBottom: 24 }}>
+        <div className="card">
+          <h3 style={{ marginBottom: 16 }}>Tasks by Status</h3>
+          {statusData.length === 0 ? (
+            <div className="empty-state">No task data</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={statusData}>
+                <XAxis dataKey="name" stroke="#9aa0b4" fontSize={11} />
+                <YAxis stroke="#9aa0b4" fontSize={11} />
+                <Tooltip contentStyle={{ background: '#1a1d27', border: '1px solid #2d3142' }} />
+                <Bar dataKey="value" fill="#6366f1" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+        <div className="card">
+          <h3 style={{ marginBottom: 16 }}>Tasks by Priority</h3>
+          {priorityData.length === 0 ? (
+            <div className="empty-state">No task data</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={220}>
+              <PieChart>
+                <Pie data={priorityData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={70} label>
+                  {priorityData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                </Pie>
+                <Tooltip contentStyle={{ background: '#1a1d27', border: '1px solid #2d3142' }} />
+              </PieChart>
+            </ResponsiveContainer>
+          )}
         </div>
       </div>
 
