@@ -37,6 +37,20 @@ def test_register_user_success(client):
     assert payload["data"]["user"]["email"] == "new.user@example.com"
     assert "password" not in payload["data"]["user"]
 
+    login_response = client.post(
+        "/api/v1/auth/login",
+        json={"email": "new.user@example.com", "password": "StrongPassword123!"},
+    )
+    token = login_response.get_json()["data"]["access_token"]
+    orgs_response = client.get(
+        "/api/v1/organizations",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    orgs = orgs_response.get_json()["data"]
+    assert isinstance(orgs, list)
+    assert len(orgs) == 1
+    assert orgs[0]["slug"] == "newuser"
+
 
 def test_register_duplicate_email(client):
     client.post(

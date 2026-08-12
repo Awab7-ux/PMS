@@ -9,7 +9,7 @@ load_dotenv(BASE_DIR / ".env")
 class Config:
     SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-key")
     SQLALCHEMY_DATABASE_URI = os.getenv(
-        "DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/pms"
+        "DATABASE_URL","postgresql+psycopg://postgres:postgres@localhost:5432/pms"
     )
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "jwt-dev-secret")

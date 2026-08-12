@@ -1,7 +1,35 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { authApi, userApi, setTokens, clearTokens, getTokens } from '../services/api';
+import { authApi, userApi, orgApi, setTokens, clearTokens, getTokens } from '../services/api';
 
 const AuthContext = createContext(null);
+
+function normalizeOrgList(data) {
+  return Array.isArray(data) ? data : [];
+}
+
+function defaultOrgSlug(username) {
+  const slug = (username || 'workspace').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  return slug || 'workspace';
+}
+
+async function ensureOrganization(user) {
+  const orgs = await orgApi.list();
+  const orgList = normalizeOrgList(orgs.data);
+  if (orgList.length) {
+    return orgList[0];
+  }
+  const slug = defaultOrgSlug(user.username);
+  try {
+    const created = await orgApi.create({ name: `${user.full_name}'s Workspace`, slug });
+    return created.data;
+  } catch {
+    const created = await orgApi.create({
+      name: `${user.full_name}'s Workspace`,
+      slug: `${slug}-${Date.now().toString(36)}`,
+    });
+    return created.data;
+  }
+}
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
@@ -17,14 +45,14 @@ export function AuthProvider({ children }) {
     try {
       const res = await userApi.me();
       setUser(res.data);
-      const orgs = await import('../services/api').then(m => m.orgApi.list());
-      if (orgs.data?.length) {
-        setOrganization(orgs.data[0]);
-        localStorage.setItem('org_id', orgs.data[0].id);
-      }
+      const org = await ensureOrganization(res.data);
+      setOrganization(org);
+      localStorage.setItem('org_id', org.id);
     } catch {
       clearTokens();
       setUser(null);
+      setOrganization(null);
+      localStorage.removeItem('org_id');
     } finally {
       setLoading(false);
     }

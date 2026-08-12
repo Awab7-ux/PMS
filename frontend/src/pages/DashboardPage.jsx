@@ -14,19 +14,37 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!orgId) return;
+    if (!orgId) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
     Promise.all([
       reportApi.analytics(orgId).catch(() => ({ data: {} })),
       projectApi.list({ organization_id: orgId, per_page: 5 }).catch(() => ({ data: [] })),
       notificationApi.list({ per_page: 5 }).catch(() => ({ data: [] })),
     ]).then(([analytics, projRes, notifRes]) => {
       setStats(analytics.data);
-      setProjects(projRes.data || []);
-      setNotifications(notifRes.data || []);
+      setProjects(Array.isArray(projRes.data) ? projRes.data : []);
+      setNotifications(Array.isArray(notifRes.data) ? notifRes.data : []);
     }).finally(() => setLoading(false));
   }, [orgId]);
 
   if (loading) return <div className="loader">Loading dashboard...</div>;
+
+  if (!orgId) {
+    return (
+      <div>
+        <div className="page-header">
+          <div>
+            <h1>Dashboard</h1>
+            <p>No organization is available for your account yet.</p>
+          </div>
+        </div>
+        <div className="card empty-state">Please sign out and sign in again, or contact your administrator.</div>
+      </div>
+    );
+  }
 
   const statusData = Object.entries(stats?.tasks_by_status || {}).map(([name, value]) => ({
     name: name.replace('_', ' '),

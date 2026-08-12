@@ -63,7 +63,9 @@ def test_create_and_get_organization(client):
         headers={"Authorization": f"Bearer {token}"},
     )
     assert get_response.status_code == 200
-    assert len(get_response.get_json()["data"]) == 1
+    orgs = get_response.get_json()["data"]
+    assert isinstance(orgs, list)
+    assert any(org["slug"] == "acme" for org in orgs)
 
 
 def test_cannot_access_other_organization(client):

@@ -1,19 +1,11 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 
 from backend.app.services.organization_service import OrganizationService
+from backend.app.utils.responses import build_response
 
 bp = Blueprint("organizations", __name__, url_prefix="/api/v1/organizations")
 service = OrganizationService()
-
-
-def build_response(success: bool, data=None, message=None, meta=None, status_code=200):
-    return jsonify({
-        "success": success,
-        "data": data or {},
-        "message": message,
-        "meta": meta or {},
-    }), status_code
 
 
 @bp.route("", methods=["POST"])

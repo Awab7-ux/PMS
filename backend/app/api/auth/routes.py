@@ -1,19 +1,11 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
 
 from backend.app.services.auth_service import AuthService
+from backend.app.utils.responses import build_response
 
 bp = Blueprint("auth", __name__, url_prefix="/api/v1/auth")
 service = AuthService()
-
-
-def build_response(success: bool, data=None, message=None, meta=None, status_code=200):
-    return jsonify({
-        "success": success,
-        "data": data or {},
-        "message": message,
-        "meta": meta or {},
-    }), status_code
 
 
 @bp.route("/register", methods=["POST"])

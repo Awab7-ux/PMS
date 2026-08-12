@@ -12,6 +12,7 @@ from backend.app.models.token import AuthToken
 from backend.app.models.user import User
 from backend.app.repositories.token_repository import TokenRepository
 from backend.app.repositories.user_repository import UserRepository
+from backend.app.services.organization_service import OrganizationService
 from backend.app.utils.uuid_helpers import parse_uuid
 
 
@@ -89,8 +90,20 @@ class AuthService:
         )
         self.repository.create(user)
 
+        self._create_default_organization(user, full_name, username)
+
         token = self._create_token(str(user.id), "email_verification", timedelta(hours=24))
         return {"user": user.to_dict(), "verification_token": token}
+
+    def _create_default_organization(self, user: User, full_name: str, username: str) -> None:
+        slug_base = re.sub(r"[^a-z0-9]+", "-", username.lower()).strip("-") or "workspace"
+        org_service = OrganizationService()
+        payload = {"name": f"{full_name}'s Workspace", "slug": slug_base}
+        try:
+            org_service.create_organization(str(user.id), payload)
+        except ValueError:
+            payload["slug"] = f"{slug_base}-{secrets.token_hex(3)}"
+            org_service.create_organization(str(user.id), payload)
 
     def login(self, payload: dict[str, Any]) -> dict[str, Any]:
         email = (payload.get("email") or "").strip().lower()
