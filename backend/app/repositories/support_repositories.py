@@ -86,6 +86,13 @@ class FileRepository:
             )
         ).scalars().all()
 
+    def list_for_comment(self, comment_id: str | uuid.UUID) -> list[FileAttachment]:
+        try:
+            parsed = uuid.UUID(str(comment_id))
+        except (ValueError, TypeError):
+            return []
+        return db.session.execute(db.select(FileAttachment).where(FileAttachment.comment_id == parsed, FileAttachment.deleted_at.is_(None))).scalars().all()
+
     def delete(self, attachment: FileAttachment) -> None:
         attachment.deleted_at = datetime.now(timezone.utc)
         db.session.flush()

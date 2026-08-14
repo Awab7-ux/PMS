@@ -35,6 +35,7 @@ from backend.app.models import (
     Notification,
     ActivityLog,
     AuthToken,
+    Event,
 )
 
 target_metadata = db.metadata

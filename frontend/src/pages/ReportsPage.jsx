@@ -1,90 +1,23 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { Bar, BarChart, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { useAuth } from '../context/AuthContext';
-import { reportApi } from '../services/api';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
+import { projectApi, reportApi } from '../services/api';
+import '../styles/reports.css';
 
-const COLORS = ['#6366f1', '#22c55e', '#f59e0b', '#ef4444', '#3b82f6', '#a855f7'];
+const COLORS = ['#6366f1', '#22c55e', '#f59e0b', '#ef4444', '#3b82f6'];
+const Empty = ({ children }) => <div className="empty-state">{children}</div>;
+const Section = ({ title, loading, error, retry, children }) => <section className="card report-section"><div className="report-section-title"><h2>{title}</h2>{error && <button className="btn btn-secondary btn-sm" onClick={retry}>Retry</button>}</div>{loading ? <div className="report-skeleton skeleton" /> : error ? <p className="report-error">Unable to load this report.</p> : children}</section>;
 
 export default function ReportsPage() {
-  const { orgId } = useAuth();
-  const [stats, setStats] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    if (!orgId) return;
-    reportApi.analytics(orgId)
-      .then(r => setStats(r.data))
-      .catch(err => setError(err.message))
-      .finally(() => setLoading(false));
-  }, [orgId]);
-
-  if (loading) return <div className="loader">Loading reports...</div>;
-  if (error) return <div className="alert alert-error">{error}</div>;
-
-  const statusData = Object.entries(stats?.tasks_by_status || {}).map(([name, value]) => ({
-    name: name.replace('_', ' '),
-    value,
-  }));
-  const priorityData = Object.entries(stats?.tasks_by_priority || {}).map(([name, value]) => ({
-    name,
-    value,
-  }));
-
-  return (
-    <div>
-      <div className="page-header">
-        <div><h1>Reports & Analytics</h1><p>Organization performance overview</p></div>
-      </div>
-
-      <div className="grid-4" style={{ marginBottom: 24 }}>
-        <div className="card stat-card"><div className="value">{stats?.total_projects ?? 0}</div><div className="label">Total Projects</div></div>
-        <div className="card stat-card"><div className="value">{stats?.active_projects ?? 0}</div><div className="label">Active</div></div>
-        <div className="card stat-card"><div className="value">{stats?.completed_tasks ?? 0}</div><div className="label">Completed Tasks</div></div>
-        <div className="card stat-card"><div className="value">{stats?.overdue_tasks ?? 0}</div><div className="label">Overdue</div></div>
-      </div>
-
-      <div className="grid-2">
-        <div className="card">
-          <h3 style={{ marginBottom: 16 }}>Tasks by Status</h3>
-          {statusData.length === 0 ? (
-            <div className="empty-state">No data</div>
-          ) : (
-            <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={statusData}>
-                <XAxis dataKey="name" stroke="#9aa0b4" fontSize={12} />
-                <YAxis stroke="#9aa0b4" fontSize={12} />
-                <Tooltip contentStyle={{ background: '#1a1d27', border: '1px solid #2d3142' }} />
-                <Bar dataKey="value" fill="#6366f1" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-
-        <div className="card">
-          <h3 style={{ marginBottom: 16 }}>Tasks by Priority</h3>
-          {priorityData.length === 0 ? (
-            <div className="empty-state">No data</div>
-          ) : (
-            <ResponsiveContainer width="100%" height={280}>
-              <PieChart>
-                <Pie data={priorityData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} label>
-                  {priorityData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                </Pie>
-                <Tooltip contentStyle={{ background: '#1a1d27', border: '1px solid #2d3142' }} />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-      </div>
-
-      <div className="card" style={{ marginTop: 24 }}>
-        <h3 style={{ marginBottom: 8 }}>Average Project Progress</h3>
-        <div style={{ fontSize: '2rem', fontWeight: 700, color: 'var(--primary)' }}>
-          {Math.round(stats?.average_project_progress ?? 0)}%
-        </div>
-      </div>
-    </div>
-  );
+  const { orgId } = useAuth(); const [projectId, setProjectId] = useState(''); const [projects, setProjects] = useState([]); const [data, setData] = useState({}); const [loading, setLoading] = useState({}); const [errors, setErrors] = useState({});
+  const load = useCallback(async name => { if (!orgId) return; setLoading(x => ({ ...x, [name]: true })); setErrors(x => ({ ...x, [name]: '' })); const params = name === 'overview' ? { organization_id: orgId } : { organization_id: orgId, ...(projectId ? { project_id: projectId } : {}) }; try { const response = await reportApi[name](params); setData(x => ({ ...x, [name]: response.data })); } catch (error) { setErrors(x => ({ ...x, [name]: error.message })); } finally { setLoading(x => ({ ...x, [name]: false })); } }, [orgId, projectId]);
+  useEffect(() => { if (orgId) projectApi.list({ organization_id: orgId, per_page: 100 }).then(r => setProjects(r.data || [])).catch(() => {}); }, [orgId]);
+  useEffect(() => { ['overview', 'tasks', 'projects', 'teams', 'productivity'].forEach(load); }, [load]);
+  const overview=data.overview||{}, tasks=data.tasks||{}, projectRows=data.projects?.items||[], teams=data.teams?.items||[], productivity=data.productivity||{};
+  return <div><div className="page-header"><div><h1>Reports & Analytics</h1><p>Live organization insights from your projects, tasks, and teams.</p></div></div><div className="page-toolbar report-filters"><label className="label" htmlFor="report-project">Project</label><select id="report-project" className="select" value={projectId} onChange={e=>setProjectId(e.target.value)}><option value="">All projects</option>{projects.map(p=><option value={p.id} key={p.id}>{p.name}</option>)}</select></div>
+    <Section title="Overview" loading={loading.overview} error={errors.overview} retry={()=>load('overview')}><div className="grid-4 report-kpis">{[['Total Projects',overview.total_projects],['Active Projects',overview.active_projects],['Total Tasks',overview.total_tasks],['Completed Tasks',overview.completed_tasks],['Overdue Tasks',overview.overdue_tasks],['Completion Rate',overview.completion_rate != null ? `${overview.completion_rate}%` : null]].map(([label,value])=><div className="stat-card" key={label}><div className="value">{value??'—'}</div><div className="label">{label}</div></div>)}</div></Section>
+    <div className="grid-2"><Section title="Task analytics" loading={loading.tasks} error={errors.tasks} retry={()=>load('tasks')}><div className="report-chart-grid"><div><h3>Tasks by status</h3>{tasks.status_distribution?.length?<ResponsiveContainer width="100%" height={220}><BarChart data={tasks.status_distribution}><XAxis dataKey="name"/><YAxis allowDecimals={false}/><Tooltip/><Bar dataKey="value" fill="#6366f1"/></BarChart></ResponsiveContainer>:<Empty>No task data available yet.</Empty>}</div><div><h3>Tasks by priority</h3>{tasks.priority_distribution?.length?<ResponsiveContainer width="100%" height={220}><PieChart><Pie data={tasks.priority_distribution} dataKey="value" nameKey="name" outerRadius={72} label>{tasks.priority_distribution.map((_,i)=><Cell key={i} fill={COLORS[i%COLORS.length]}/>)}</Pie><Tooltip/><Legend/></PieChart></ResponsiveContainer>:<Empty>No task data available yet.</Empty>}</div></div><div className="report-mini-kpis">Completed <strong>{tasks.completed??0}</strong> · Incomplete <strong>{tasks.incomplete??0}</strong> · Overdue <strong>{tasks.overdue_count??0}</strong> · Completion <strong>{tasks.completion_rate??0}%</strong></div></Section>
+    <Section title="Productivity" loading={loading.productivity} error={errors.productivity} retry={()=>load('productivity')}><div className="grid-2">{[['Completion rate',productivity.completion_rate,'%'],['Overdue rate',productivity.overdue_rate,'%'],['Completed today',productivity.tasks_completed_today,''],['Completed this week',productivity.tasks_completed_this_week,''],['Completed this month',productivity.tasks_completed_this_month,'']].map(([label,value,suffix])=><div className="report-metric" key={label}><small>{label}</small><strong>{value??'—'}{value!=null&&suffix}</strong></div>)}</div></Section></div>
+    <div className="grid-2"><Section title="Project completion" loading={loading.projects} error={errors.projects} retry={()=>load('projects')}>{projectRows.length?<ResponsiveContainer width="100%" height={Math.max(220,projectRows.length*45)}><BarChart data={projectRows} layout="vertical"><XAxis type="number" domain={[0,100]}/><YAxis type="category" dataKey="name" width={100}/><Tooltip/><Bar dataKey="completion_rate" fill="#22c55e"/></BarChart></ResponsiveContainer>:<Empty>No project data available yet.</Empty>}</Section><Section title="Team workload" loading={loading.teams} error={errors.teams} retry={()=>load('teams')}>{teams.length?<div className="table-wrap"><table><thead><tr><th>Team</th><th>Members</th><th>Assigned</th><th>Completed</th><th>Overdue</th></tr></thead><tbody>{teams.map(t=><tr key={t.team_id}><td>{t.name}</td><td>{t.members}</td><td>{t.assigned_tasks}</td><td>{t.completed_tasks}</td><td>{t.overdue_tasks}</td></tr>)}</tbody></table></div>:<Empty>No team workload data available yet.</Empty>}</Section></div>
+  </div>;
 }

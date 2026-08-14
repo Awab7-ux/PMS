@@ -8,3 +8,4 @@ from backend.app.models.file_attachment import FileAttachment
 from backend.app.models.notification import Notification
 from backend.app.models.activity_log import ActivityLog
 from backend.app.models.token import AuthToken
+from backend.app.models.event import Event

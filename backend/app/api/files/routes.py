@@ -25,6 +25,7 @@ def upload_file():
             file.filename,
             task_id=request.form.get("task_id"),
             project_id=request.form.get("project_id"),
+            comment_id=request.form.get("comment_id"),
         )
     except PermissionError as exc:
         return build_response(False, {}, str(exc), {}, 403)
@@ -38,7 +39,7 @@ def upload_file():
 def list_files():
     user_id = get_jwt_identity()
     try:
-        result = service.list_files(user_id, request.args.get("task_id"), request.args.get("project_id"))
+        result = service.list_files(user_id, request.args.get("task_id"), request.args.get("project_id"), request.args.get("comment_id"))
     except PermissionError as exc:
         return build_response(False, {}, str(exc), {}, 403)
     except ValueError as exc:
@@ -70,3 +71,30 @@ def delete_file(file_id):
     except ValueError as exc:
         return build_response(False, {}, str(exc), {}, 404)
     return build_response(True, result, result.get("message"), {}, 200)
+
+
+@bp.route("/tasks/<task_id>/attachments", methods=["GET", "POST"])
+@jwt_required()
+def task_attachments(task_id):
+    user_id = get_jwt_identity()
+    try:
+        if request.method == "GET":
+            return build_response(True, service.list_files(user_id, task_id=task_id), None, {}, 200)
+        uploaded = request.files.get("file")
+        if not uploaded or not uploaded.filename: return build_response(False, {}, "No file provided", {}, 400)
+        return build_response(True, service.upload(user_id, uploaded.read(), uploaded.filename, task_id=task_id), "File uploaded.", {}, 201)
+    except PermissionError as exc: return build_response(False, {}, str(exc), {}, 403)
+    except ValueError as exc: return build_response(False, {}, str(exc), {}, 400)
+
+
+@bp.route("/comments/<comment_id>/attachments", methods=["GET", "POST"])
+@jwt_required()
+def comment_attachments(comment_id):
+    user_id = get_jwt_identity()
+    try:
+        if request.method == "GET": return build_response(True, service.list_files(user_id, comment_id=comment_id), None, {}, 200)
+        uploaded = request.files.get("file")
+        if not uploaded or not uploaded.filename: return build_response(False, {}, "No file provided", {}, 400)
+        return build_response(True, service.upload(user_id, uploaded.read(), uploaded.filename, comment_id=comment_id), "File uploaded.", {}, 201)
+    except PermissionError as exc: return build_response(False, {}, str(exc), {}, 403)
+    except ValueError as exc: return build_response(False, {}, str(exc), {}, 400)

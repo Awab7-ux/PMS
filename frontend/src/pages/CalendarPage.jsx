@@ -1,86 +1,38 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { calendarApi } from '../services/api';
+import { calendarApi, eventApi, projectApi, teamApi } from '../services/api';
+import '../styles/calendar.css';
 
-function getMonthRange(d = new Date()) {
-  const start = new Date(d.getFullYear(), d.getMonth(), 1);
-  const end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
-  return {
-    start: start.toISOString().slice(0, 10),
-    end: end.toISOString().slice(0, 10),
-    label: start.toLocaleString('default', { month: 'long', year: 'numeric' }),
-  };
-}
+const initialForm = { title: '', description: '', start_at: '', end_at: '', all_day: false, location: '', project_id: '', team_id: '' };
+const iso = value => value ? new Date(value).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
+const localToIso = value => value ? new Date(value).toISOString() : null;
+const toLocal = value => value ? new Date(value).toISOString().slice(0, 16) : '';
+function monthRange(cursor) { const start = new Date(cursor.getFullYear(), cursor.getMonth(), 1); const end = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0); return { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) }; }
 
 export default function CalendarPage() {
   const { orgId } = useAuth();
-  const [range, setRange] = useState(getMonthRange());
-  const [events, setEvents] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    if (!orgId) { setLoading(false); return; }
-    setLoading(true);
-    setError('');
-    calendarApi.events({ organization_id: orgId, start: range.start, end: range.end })
-      .then(r => setEvents(r.data?.events || r.data || []))
-      .catch(err => setError(err.message))
-      .finally(() => setLoading(false));
-  }, [orgId, range]);
-
-  const shiftMonth = (delta) => {
-    const d = new Date(range.start);
-    d.setMonth(d.getMonth() + delta);
-    setRange(getMonthRange(d));
-  };
-
-  const grouped = events.reduce((acc, ev) => {
-    const day = ev.date?.slice(0, 10) || 'unknown';
-    if (!acc[day]) acc[day] = [];
-    acc[day].push(ev);
-    return acc;
-  }, {});
-
-  if (loading) return <div className="loader">Loading calendar...</div>;
-
-  return (
-    <div>
-      <div className="page-header">
-        <div><h1>Calendar</h1><p>Task deadlines and project milestones at a glance.</p></div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <button className="btn btn-secondary btn-sm" onClick={() => shiftMonth(-1)}>← Prev</button>
-          <strong>{range.label}</strong>
-          <button className="btn btn-secondary btn-sm" onClick={() => shiftMonth(1)}>Next →</button>
-        </div>
-      </div>
-
-      {error && <div className="alert alert-error">{error}</div>}
-
-      {events.length === 0 ? (
-        <div className="card empty-state">No events this month</div>
-      ) : (
-        <div className="card">
-          {Object.keys(grouped).sort().map(day => (
-            <div key={day} style={{ padding: '12px 0', borderBottom: '1px solid var(--border)' }}>
-              <strong style={{ display: 'block', marginBottom: 8 }}>{new Date(day + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}</strong>
-              {grouped[day].map((ev, i) => (
-                <div key={i} className="calendar-event">
-                  <span className={`badge badge-${ev.type === 'task_deadline' ? 'high' : 'medium'}`}>{ev.type?.replace('_', ' ')}</span>
-                  <span>{ev.title}</span>
-                  {ev.entity_type === 'task' && ev.entity_id && (
-                    <Link to={`/tasks/${ev.entity_id}`}>View</Link>
-                  )}
-                  {ev.entity_type === 'project' && ev.entity_id && (
-                    <Link to={`/projects/${ev.entity_id}`}>View</Link>
-                  )}
-                </div>
-              ))}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
+  const [cursor, setCursor] = useState(new Date()); const [items, setItems] = useState([]); const [projects, setProjects] = useState([]); const [teams, setTeams] = useState([]);
+  const [loading, setLoading] = useState(true); const [error, setError] = useState(''); const [kind, setKind] = useState('all'); const [filters, setFilters] = useState({ project_id: '', team_id: '', status: '', priority: '' });
+  const [modal, setModal] = useState(false); const [editing, setEditing] = useState(null); const [form, setForm] = useState(initialForm); const [saving, setSaving] = useState(false);
+  const range = monthRange(cursor);
+  const load = useCallback(async () => { if (!orgId) return; setLoading(true); setError(''); try { const response = await calendarApi.feed({ organization_id: orgId, start: range.start, end: range.end, ...Object.fromEntries(Object.entries(filters).filter(([, value]) => value)) }); setItems(response.data?.events || []); } catch (err) { setError(err.message || 'Unable to load calendar'); } finally { setLoading(false); } }, [orgId, range.start, range.end, filters]);
+  useEffect(() => { load(); }, [load]);
+  useEffect(() => { if (!orgId) return; Promise.all([projectApi.list({ organization_id: orgId, per_page: 100 }), teamApi.list()]).then(([p, t]) => { setProjects(p.data || []); setTeams((t.data || []).filter(team => team.organization_id === orgId)); }).catch(() => {}); }, [orgId]);
+  const shown = useMemo(() => items.filter(item => kind === 'all' || item.type === kind), [items, kind]);
+  const days = useMemo(() => { const first = new Date(cursor.getFullYear(), cursor.getMonth(), 1); const start = new Date(first); start.setDate(1 - first.getDay()); return Array.from({ length: 42 }, (_, index) => { const date = new Date(start); date.setDate(start.getDate() + index); const key = date.toISOString().slice(0, 10); return { date, key, items: shown.filter(item => item.date === key) }; }); }, [cursor, shown]);
+  const agenda = useMemo(() => { const now = new Date(); now.setHours(0, 0, 0, 0); const nextWeek = new Date(now); nextWeek.setDate(now.getDate() + 7); return items.filter(item => new Date(item.date + 'T00:00:00') <= nextWeek).sort((a, b) => a.date.localeCompare(b.date)); }, [items]);
+  const openCreate = date => { setEditing(null); setForm({ ...initialForm, start_at: date ? `${date}T09:00` : '', end_at: date ? `${date}T10:00` : '' }); setModal(true); };
+  const openEdit = item => { if (item.type === 'task') return; setEditing(item); setForm({ title: item.title, description: item.description || '', start_at: toLocal(item.start_at), end_at: toLocal(item.end_at), all_day: item.all_day, location: item.location || '', project_id: item.project_id || '', team_id: item.team_id || '' }); setModal(true); };
+  const save = async event => { event.preventDefault(); if (!form.title.trim() || !form.start_at || (!form.all_day && !form.end_at)) { setError('Title, start, and end time are required.'); return; } setSaving(true); setError(''); const data = { ...form, organization_id: orgId, project_id: form.project_id || null, team_id: form.team_id || null, start_at: localToIso(form.start_at), end_at: localToIso(form.end_at) }; try { if (editing) await eventApi.update(editing.id, data); else await eventApi.create(data); setModal(false); await load(); } catch (err) { setError(err.message || `Unable to ${editing ? 'update' : 'create'} event`); } finally { setSaving(false); } };
+  const remove = async item => { if (!window.confirm(`Delete “${item.title}”?`)) return; try { await eventApi.delete(item.id); await load(); } catch (err) { setError(err.message || 'Unable to delete event'); } };
+  const select = (key, options) => <select className="select" value={filters[key]} onChange={event => setFilters({ ...filters, [key]: event.target.value })}><option value="">All {key.replace('_id', '').replace('_', ' ')}</option>{options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select>;
+  return <div className="calendar-page">
+    <div className="page-header"><div><h1>Calendar</h1><p>Plan deadlines and scheduled work in one place.</p></div><button className="btn btn-primary" onClick={() => openCreate()}>+ Create event</button></div>
+    {error && <div className="alert alert-error">{error}</div>}
+    <div className="page-toolbar"><div className="calendar-tabs">{[['all', 'All'], ['task', 'Tasks'], ['event', 'Events']].map(([value, label]) => <button key={value} className={`btn btn-sm ${kind === value ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setKind(value)}>{label}</button>)}</div>{select('project_id', projects.map(p => ({ value: p.id, label: p.name })))}{select('team_id', teams.map(t => ({ value: t.id, label: t.name })))}{select('status', ['BACKLOG', 'TODO', 'IN_PROGRESS', 'REVIEW', 'DONE'].map(value => ({ value, label: value.replace('_', ' ') })))}{select('priority', ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'].map(value => ({ value, label: value })) )}</div>
+    <div className="calendar-layout"><section className="card calendar-main"><div className="calendar-nav"><button className="btn btn-secondary btn-sm" onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1))}>← Prev</button><strong>{cursor.toLocaleString(undefined, { month: 'long', year: 'numeric' })}</strong><button className="btn btn-secondary btn-sm" onClick={() => setCursor(new Date())}>Today</button><button className="btn btn-secondary btn-sm" onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1))}>Next →</button></div>{loading ? <div className="loader">Loading calendar...</div> : <div className="calendar-grid">{['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => <div className="calendar-weekday" key={day}>{day}</div>)}{days.map(({ date, key, items: dayItems }) => <div className={`calendar-day ${date.getMonth() !== cursor.getMonth() ? 'muted' : ''}`} key={key} onDoubleClick={() => openCreate(key)}><span className="calendar-date">{date.getDate()}</span>{dayItems.slice(0, 3).map(item => <button className={`calendar-chip ${item.type}`} key={`${item.type}-${item.id}`} onClick={() => openEdit(item)} title={item.title}>{item.type === 'task' ? <Link to={`/tasks/${item.id}`} onClick={e => e.stopPropagation()}>{item.title}</Link> : item.title}</button>)}{dayItems.length > 3 && <small>+{dayItems.length - 3} more</small>}</div>)}</div>}</section>
+    <aside className="card calendar-agenda"><h3>Upcoming</h3>{agenda.length ? agenda.map(item => <div className="agenda-item" key={`${item.type}-${item.id}`}><span className={`agenda-dot ${item.type}`} /><div><strong>{item.type === 'task' ? <Link to={`/tasks/${item.id}`}>{item.title}</Link> : <button className="text-button" onClick={() => openEdit(item)}>{item.title}</button>}</strong><small>{item.type === 'task' ? `${item.date} · ${item.project?.name || 'Project'}` : `${iso(item.start_at)}${item.all_day ? ' · All day' : ''}`}</small></div>{item.type === 'event' && <button className="btn btn-danger btn-sm" onClick={() => remove(item)}>Delete</button>}</div>) : <p className="muted-copy">No tasks or events in the next 7 days.</p>}</aside></div>
+    {modal && <div className="modal-overlay" onClick={() => setModal(false)}><div className="modal calendar-modal" onClick={event => event.stopPropagation()} role="dialog" aria-modal="true"><h2>{editing ? 'Edit event' : 'Create event'}</h2><form onSubmit={save}><div className="form-group"><label className="label">Title</label><input className="input" required maxLength="255" autoFocus value={form.title} onChange={event => setForm({ ...form, title: event.target.value })} /></div><div className="form-group"><label className="label">Description</label><textarea className="textarea" value={form.description} onChange={event => setForm({ ...form, description: event.target.value })} /></div><label className="check-row"><input type="checkbox" checked={form.all_day} onChange={event => setForm({ ...form, all_day: event.target.checked })} /> All day</label><div className="form-row"><div className="form-group"><label className="label">Start</label><input className="input" type="datetime-local" required value={form.start_at} onChange={event => setForm({ ...form, start_at: event.target.value })} /></div><div className="form-group"><label className="label">End</label><input className="input" type="datetime-local" required={!form.all_day} value={form.end_at} onChange={event => setForm({ ...form, end_at: event.target.value })} /></div></div><div className="form-row"><div className="form-group"><label className="label">Project</label><select className="select" value={form.project_id} onChange={event => setForm({ ...form, project_id: event.target.value })}><option value="">No project</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></div><div className="form-group"><label className="label">Team</label><select className="select" value={form.team_id} onChange={event => setForm({ ...form, team_id: event.target.value })}><option value="">No team</option>{teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></div></div><div className="form-group"><label className="label">Location</label><input className="input" value={form.location} onChange={event => setForm({ ...form, location: event.target.value })} /></div><div className="modal-actions"><button type="button" className="btn btn-secondary" onClick={() => setModal(false)}>Cancel</button><button className="btn btn-primary" disabled={saving}>{saving ? 'Saving…' : editing ? 'Save changes' : 'Create event'}</button></div></form></div></div>}
+  </div>;
 }

@@ -1,75 +1,59 @@
 from datetime import date, timedelta
 from typing import Any
 
-from backend.app.repositories.organization_repository import OrganizationRepository
+from backend.app import db
+from backend.app.models.task import Task
+from backend.app.repositories.event_repository import EventRepository
 from backend.app.repositories.project_repository import ProjectRepository
-from backend.app.repositories.task_repository import TaskRepository
+from backend.app.services.event_service import EventService
 from backend.app.services.rbac_service import RBACService
+from backend.app.utils.uuid_helpers import parse_uuid
 
 
 class CalendarService:
+    """Combined calendar feed; due-dated tasks remain task entities."""
     def __init__(self):
-        self.task_repo = TaskRepository()
-        self.project_repo = ProjectRepository()
-        self.org_repo = OrganizationRepository()
-        self.rbac = RBACService()
+        self.projects, self.events, self.rbac = ProjectRepository(), EventRepository(), RBACService()
+        self.event_service = EventService()
+
+    @staticmethod
+    def _date(value, fallback):
+        if not value:
+            return fallback
+        try:
+            return date.fromisoformat(str(value)[:10])
+        except ValueError as exc:
+            raise ValueError("Invalid date format; use YYYY-MM-DD") from exc
 
     def get_events(self, user_id: str, query_params: dict[str, Any]) -> dict[str, Any]:
-        organization_id = query_params.get("organization_id")
-        if not organization_id:
+        org_id = parse_uuid(query_params.get("organization_id"))
+        if not org_id:
             raise ValueError("organization_id is required")
-        self.rbac.require_org_membership(user_id, organization_id)
-
-        start_str = query_params.get("start")
-        end_str = query_params.get("end")
-        start = date.fromisoformat(start_str[:10]) if start_str else date.today().replace(day=1)
-        end = date.fromisoformat(end_str[:10]) if end_str else (start + timedelta(days=31))
-
-        events = []
-        projects, _ = self.project_repo.list_for_user(user_id, organization_id, None, None, 1, 1000)
-        for project in projects:
-            if project.end_date and start <= project.end_date <= end:
-                events.append({
-                    "type": "project_deadline",
-                    "title": f"Project deadline: {project.name}",
-                    "date": project.end_date.isoformat(),
-                    "entity_id": str(project.id),
-                    "entity_type": "project",
-                })
-
-        tasks, _ = self.task_repo.list_for_project(
-            projects[0].id if projects else "00000000-0000-0000-0000-000000000000",
-            page=1, per_page=1000,
-        ) if projects else ([], 0)
-
-        from backend.app import db
-        from backend.app.models.task import Task
-        import uuid
-        try:
-            parsed_org = uuid.UUID(str(organization_id))
-        except (ValueError, TypeError):
-            parsed_org = None
-
-        if parsed_org:
-            all_tasks = db.session.execute(
-                db.select(Task).where(
-                    Task.organization_id == parsed_org,
-                    Task.due_date.isnot(None),
-                    Task.due_date >= start,
-                    Task.due_date <= end,
-                    Task.deleted_at.is_(None),
-                )
-            ).scalars().all()
-            for task in all_tasks:
-                events.append({
-                    "type": "task_due",
-                    "title": task.title,
-                    "date": task.due_date.isoformat(),
-                    "entity_id": str(task.id),
-                    "entity_type": "task",
-                    "status": task.status,
-                    "priority": task.priority,
-                })
-
-        events.sort(key=lambda e: e["date"])
-        return {"events": events, "start": start.isoformat(), "end": end.isoformat()}
+        self.rbac.require_org_membership(user_id, str(org_id))
+        start = self._date(query_params.get("start"), date.today().replace(day=1))
+        end = self._date(query_params.get("end"), start + timedelta(days=31))
+        if end < start:
+            raise ValueError("end must be on or after start")
+        project_filter, team_filter = parse_uuid(query_params.get("project_id")), parse_uuid(query_params.get("team_id"))
+        if query_params.get("project_id") and not project_filter: raise ValueError("Invalid project_id")
+        if query_params.get("team_id") and not team_filter: raise ValueError("Invalid team_id")
+        projects, _ = self.projects.list_for_user(user_id, str(org_id), page=1, per_page=1000)
+        project_ids = {project.id for project in projects}
+        if project_filter and project_filter not in project_ids:
+            raise PermissionError("Access denied")
+        task_query = db.select(Task).where(Task.organization_id == org_id, Task.deleted_at.is_(None), Task.due_date.isnot(None), Task.due_date >= start, Task.due_date <= end, Task.project_id.in_(project_ids or [parse_uuid("00000000-0000-0000-0000-000000000000")]))
+        if project_filter: task_query = task_query.where(Task.project_id == project_filter)
+        if team_filter: task_query = task_query.where(Task.team_id == team_filter)
+        if query_params.get("status"): task_query = task_query.where(Task.status == query_params["status"].upper())
+        if query_params.get("priority"): task_query = task_query.where(Task.priority == query_params["priority"].upper())
+        items = []
+        for task in db.session.execute(task_query).scalars():
+            items.append({"id": str(task.id), "type": "task", "title": task.title, "date": task.due_date.isoformat(), "due_date": task.due_date.isoformat(), "status": task.status, "priority": task.priority, "project": {"id": str(task.project.id), "name": task.project.name} if task.project else None, "assignee": {"id": str(task.assignee.id), "full_name": task.assignee.full_name} if task.assignee else None})
+        for event in self.events.list(org_id, None, None, project_filter, team_filter):
+            if event.start_at.date() > end or (event.end_at and event.end_at.date() < start):
+                continue
+            try: self.event_service._access(user_id, event)
+            except PermissionError: continue
+            data = event.to_dict(); data["date"] = data["start_at"][:10]; items.append(data)
+        items.sort(key=lambda item: (item["date"], item["title"].lower()))
+        return {"events": items, "start": start.isoformat(), "end": end.isoformat()}

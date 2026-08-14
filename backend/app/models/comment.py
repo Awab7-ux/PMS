@@ -23,6 +23,7 @@ class Comment(db.Model):
 
     task: Mapped["Task"] = relationship(back_populates="comments")
     author: Mapped["User"] = relationship(foreign_keys=[author_id])
+    attachments: Mapped[list["FileAttachment"]] = relationship(back_populates="comment", cascade="all, delete-orphan")
 
     @property
     def mentions(self) -> list[str]:

@@ -42,6 +42,48 @@ def analytics():
     return build_response(True, result, None, {}, 200)
 
 
+@reports_bp.route("/overview", methods=["GET"])
+@jwt_required()
+def analytics_overview():
+    return analytics()
+
+
+@reports_bp.route("/tasks", methods=["GET"])
+@jwt_required()
+def task_analytics():
+    user_id = get_jwt_identity()
+    try: result = report_service.get_task_analytics(user_id, request.args.to_dict())
+    except (PermissionError, ValueError) as exc: return build_response(False, {}, str(exc), {}, 403 if isinstance(exc, PermissionError) else 400)
+    return build_response(True, result, None, {}, 200)
+
+
+@reports_bp.route("/projects", methods=["GET"])
+@jwt_required()
+def project_analytics():
+    user_id = get_jwt_identity()
+    try: result = report_service.get_project_analytics(user_id, request.args.to_dict())
+    except (PermissionError, ValueError) as exc: return build_response(False, {}, str(exc), {}, 403 if isinstance(exc, PermissionError) else 400)
+    return build_response(True, result, None, {}, 200)
+
+
+@reports_bp.route("/teams", methods=["GET"])
+@jwt_required()
+def team_analytics():
+    user_id = get_jwt_identity()
+    try: result = report_service.get_team_analytics(user_id, request.args.to_dict())
+    except (PermissionError, ValueError) as exc: return build_response(False, {}, str(exc), {}, 403 if isinstance(exc, PermissionError) else 400)
+    return build_response(True, result, None, {}, 200)
+
+
+@reports_bp.route("/productivity", methods=["GET"])
+@jwt_required()
+def productivity_analytics():
+    user_id = get_jwt_identity()
+    try: result = report_service.get_productivity(user_id, request.args.to_dict())
+    except (PermissionError, ValueError) as exc: return build_response(False, {}, str(exc), {}, 403 if isinstance(exc, PermissionError) else 400)
+    return build_response(True, result, None, {}, 200)
+
+
 @search_bp.route("", methods=["GET"])
 @jwt_required()
 def global_search():

@@ -142,6 +142,7 @@ export const fileApi = {
     form.append('file', file);
     if (meta.task_id) form.append('task_id', meta.task_id);
     if (meta.project_id) form.append('project_id', meta.project_id);
+    if (meta.comment_id) form.append('comment_id', meta.comment_id);
     const res = await fetch(`${API_BASE}/files/upload`, {
       method: 'POST',
       headers: access ? { Authorization: `Bearer ${access}` } : {},
@@ -155,15 +156,31 @@ export const fileApi = {
   },
   downloadUrl: (fileId) => `${API_BASE}/files/${fileId}/download`,
   delete: (id) => apiRequest(`/files/${id}`, { method: 'DELETE' }),
+  listTask: (taskId) => apiRequest(`/files/tasks/${taskId}/attachments`),
+  listComment: (commentId) => apiRequest(`/files/comments/${commentId}/attachments`),
 };
 
 export const reportApi = {
   analytics: (orgId) => apiRequest(`/reports/analytics?organization_id=${orgId}`),
+  overview: (params) => apiRequest(`/reports/overview?${new URLSearchParams(params)}`),
+  tasks: (params) => apiRequest(`/reports/tasks?${new URLSearchParams(params)}`),
+  projects: (params) => apiRequest(`/reports/projects?${new URLSearchParams(params)}`),
+  teams: (params) => apiRequest(`/reports/teams?${new URLSearchParams(params)}`),
+  productivity: (params) => apiRequest(`/reports/productivity?${new URLSearchParams(params)}`),
   activity: (params) => apiRequest(`/activity?${new URLSearchParams(params)}`),
 };
 
 export const calendarApi = {
   events: (params) => apiRequest(`/calendar/events?${new URLSearchParams(params)}`),
+  feed: (params) => apiRequest(`/calendar/events?${new URLSearchParams(params)}`),
+};
+
+export const eventApi = {
+  list: (params) => apiRequest(`/events?${new URLSearchParams(params)}`),
+  create: (data) => apiRequest('/events', { method: 'POST', body: JSON.stringify(data) }),
+  get: (id) => apiRequest(`/events/${id}`),
+  update: (id, data) => apiRequest(`/events/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  delete: (id) => apiRequest(`/events/${id}`, { method: 'DELETE' }),
 };
 
 export const searchApi = {

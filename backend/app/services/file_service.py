@@ -8,7 +8,7 @@ from werkzeug.utils import secure_filename
 from backend.app import db
 from backend.app.models.activity_log import ActivityLog
 from backend.app.models.file_attachment import FileAttachment
-from backend.app.repositories.support_repositories import ActivityRepository, FileRepository
+from backend.app.repositories.support_repositories import ActivityRepository, CommentRepository, FileRepository
 from backend.app.repositories.task_repository import TaskRepository
 from backend.app.services.rbac_service import RBACService
 from backend.app.storage.local_storage import get_storage
@@ -16,13 +16,14 @@ from backend.app.utils.uuid_helpers import parse_uuid
 
 ALLOWED_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg", ".gif", ".doc", ".docx", ".xls", ".xlsx", ".txt", ".csv", ".zip"}
 BLOCKED_EXTENSIONS = {".exe", ".bat", ".cmd", ".sh", ".ps1", ".msi", ".dll", ".scr"}
-MAX_FILE_SIZE = int(os.getenv("MAX_UPLOAD_SIZE", 10 * 1024 * 1024))
+MAX_FILE_SIZE = int(os.getenv("MAX_UPLOAD_SIZE_MB", "25")) * 1024 * 1024
 
 
 class FileService:
     def __init__(self):
         self.repo = FileRepository()
         self.task_repo = TaskRepository()
+        self.comment_repo = CommentRepository()
         self.rbac = RBACService()
         self.activity = ActivityRepository()
         self.storage = get_storage()
@@ -43,11 +44,21 @@ class FileService:
             raise ValueError("Suspicious file type")
         return mime
 
-    def upload(self, user_id: str, file_data: bytes, filename: str, task_id: str | None = None, project_id: str | None = None) -> dict[str, Any]:
+    def upload(self, user_id: str, file_data: bytes, filename: str, task_id: str | None = None, project_id: str | None = None, comment_id: str | None = None) -> dict[str, Any]:
         mime = self._validate_file(filename, file_data)
         org_id = None
 
-        if task_id:
+        if sum(bool(value) for value in (task_id, project_id, comment_id)) != 1:
+            raise ValueError("Exactly one attachment parent is required")
+        if comment_id:
+            comment = self.comment_repo.get_by_id(comment_id)
+            if not comment: raise ValueError("Comment not found")
+            task = self.task_repo.get_by_id(str(comment.task_id))
+            project = self.rbac.require_project_access(user_id, str(task.project_id))
+            org_id = project.organization_id
+            if not self.rbac.has_permission(user_id, "file.upload", organization_id=org_id): raise PermissionError("Insufficient permissions")
+            task_id = None; project_id = None
+        elif task_id:
             task = self.task_repo.get_by_id(task_id)
             if not task:
                 raise ValueError("Task not found")
@@ -70,6 +81,7 @@ class FileService:
         attachment = FileAttachment(
             task_id=parse_uuid(task_id) if task_id else None,
             project_id=parse_uuid(project_id) if project_id else None,
+            comment_id=parse_uuid(comment_id) if comment_id else None,
             uploader_id=parse_uuid(user_id),
             original_filename=secure_filename(filename),
             stored_filename=stored_filename,
@@ -89,7 +101,12 @@ class FileService:
         db.session.commit()
         return attachment.to_dict()
 
-    def list_files(self, user_id: str, task_id: str | None = None, project_id: str | None = None) -> list[dict[str, Any]]:
+    def list_files(self, user_id: str, task_id: str | None = None, project_id: str | None = None, comment_id: str | None = None) -> list[dict[str, Any]]:
+        if comment_id:
+            comment = self.comment_repo.get_by_id(comment_id)
+            if not comment: raise ValueError("Comment not found")
+            task = self.task_repo.get_by_id(str(comment.task_id)); self.rbac.require_project_access(user_id, str(task.project_id))
+            return [f.to_dict() for f in self.repo.list_for_comment(comment_id)]
         if task_id:
             task = self.task_repo.get_by_id(task_id)
             if not task:
@@ -105,7 +122,9 @@ class FileService:
         attachment = self.repo.get_by_id(file_id)
         if not attachment:
             raise ValueError("File not found")
-        if attachment.task_id:
+        if attachment.comment_id:
+            comment = self.comment_repo.get_by_id(str(attachment.comment_id)); task = self.task_repo.get_by_id(str(comment.task_id)); self.rbac.require_project_access(user_id, str(task.project_id))
+        elif attachment.task_id:
             task = self.task_repo.get_by_id(str(attachment.task_id))
             self.rbac.require_project_access(user_id, str(task.project_id))
         elif attachment.project_id:
@@ -120,7 +139,9 @@ class FileService:
         if not attachment:
             raise ValueError("File not found")
         org_id = None
-        if attachment.task_id:
+        if attachment.comment_id:
+            comment = self.comment_repo.get_by_id(str(attachment.comment_id)); task = self.task_repo.get_by_id(str(comment.task_id)); project = self.rbac.require_project_access(user_id, str(task.project_id)); org_id = project.organization_id
+        elif attachment.task_id:
             task = self.task_repo.get_by_id(str(attachment.task_id))
             project = self.rbac.require_project_access(user_id, str(task.project_id))
             org_id = project.organization_id
