@@ -154,6 +154,22 @@ def test_kanban_board_and_move(client):
     assert move_resp.get_json()["data"]["status"] == "IN_PROGRESS"
 
 
+def test_task_rejects_assignee_outside_organization(client):
+    owner_token = register_and_login(client, "isolation-owner@example.com", "isoowner", "Isolation Owner")
+    org_id = create_org(client, owner_token, "Isolation Org", "isolation-org")
+    project_id = create_project(client, owner_token, org_id, "Isolation Project")
+    outsider_token = register_and_login(client, "outsider@example.com", "outsider", "Outside User")
+
+    outsider_me = client.get("/api/v1/users/me", headers={"Authorization": f"Bearer {outsider_token}"})
+    outsider_id = outsider_me.get_json()["data"]["id"]
+    response = client.post(
+        "/api/v1/tasks",
+        json={"project_id": project_id, "title": "Private task", "assignee_id": outsider_id},
+        headers={"Authorization": f"Bearer {owner_token}"},
+    )
+    assert response.status_code == 403
+
+
 def test_comments(client):
     token = register_and_login(client, "comment@example.com", "commentuser", "Comment User")
     org_id = create_org(client, token)
