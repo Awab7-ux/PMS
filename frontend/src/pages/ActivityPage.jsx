@@ -9,7 +9,9 @@ export default function ActivityPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (!orgId) return;
+    if (!orgId) { setLoading(false); return; }
+    setLoading(true);
+    setError('');
     reportApi.activity({ organization_id: orgId, per_page: 50 })
       .then(r => setItems(r.data || []))
       .catch(err => setError(err.message))
@@ -21,7 +23,7 @@ export default function ActivityPage() {
   return (
     <div>
       <div className="page-header">
-        <div><h1>Activity</h1><p>Recent actions across your organization</p></div>
+        <div><h1>Activity</h1><p>A live record of work across your organization.</p></div>
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}
@@ -29,7 +31,7 @@ export default function ActivityPage() {
       {items.length === 0 ? (
         <div className="card empty-state">No activity yet</div>
       ) : (
-        <div className="card">
+        <div className="card" style={{ paddingTop: 8, paddingBottom: 8 }}>
           {items.map(a => (
             <div key={a.id} style={{ padding: '12px 0', borderBottom: '1px solid var(--border)', display: 'flex', gap: 16 }}>
               <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--primary)', marginTop: 8, flexShrink: 0 }} />

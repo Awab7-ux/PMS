@@ -51,13 +51,23 @@ export default function MainLayout() {
         <nav className="sidebar-nav">
           {NAV.map(item => (
             <NavLink key={item.to} to={item.to} className={({ isActive }) => isActive ? 'active' : ''} onClick={() => setSidebarOpen(false)}>
-              <span>{item.icon}</span> {item.label}
+              <span className="nav-icon" aria-hidden="true">{item.icon}</span> {item.label}
               {item.to === '/notifications' && unread > 0 && (
                 <span className="nav-badge">{unread}</span>
               )}
             </NavLink>
           ))}
         </nav>
+        <div className="sidebar-footer">
+          <div className="profile-card">
+            <span className="avatar" aria-hidden="true">{(user?.full_name || user?.username || 'U').slice(0, 1).toUpperCase()}</span>
+            <div style={{ minWidth: 0 }}>
+              <div className="profile-name">{user?.full_name || user?.username}</div>
+              <div className="profile-email">{user?.email}</div>
+            </div>
+            <button type="button" className="logout-button" onClick={handleLogout} aria-label="Log out">↪</button>
+          </div>
+        </div>
       </aside>
 
       <div className="layout-main">

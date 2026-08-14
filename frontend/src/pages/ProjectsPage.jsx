@@ -10,11 +10,15 @@ export default function ProjectsPage() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ name: '', description: '', status: 'Planning', priority: 'Medium' });
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const load = () => {
-    if (!orgId) return;
+    if (!orgId) { setLoading(false); return; }
+    setLoading(true);
     projectApi.list({ organization_id: orgId, search, per_page: 50 })
       .then(r => setProjects(r.data || []))
+      .catch(err => setError(err.message || 'Unable to load projects.'))
       .finally(() => setLoading(false));
   };
 
@@ -22,10 +26,11 @@ export default function ProjectsPage() {
 
   const handleCreate = async (e) => {
     e.preventDefault();
-    await projectApi.create({ ...form, organization_id: orgId });
-    setShowModal(false);
-    setForm({ name: '', description: '', status: 'Planning', priority: 'Medium' });
-    load();
+    setSaving(true); setError('');
+    try {
+      await projectApi.create({ ...form, organization_id: orgId });
+      setShowModal(false); setForm({ name: '', description: '', status: 'Planning', priority: 'Medium' }); load();
+    } catch (err) { setError(err.message || 'Unable to create project.'); } finally { setSaving(false); }
   };
 
   const handleDelete = async (id) => {
@@ -39,9 +44,11 @@ export default function ProjectsPage() {
   return (
     <div>
       <div className="page-header">
-        <div><h1>Projects</h1><p>Manage your projects</p></div>
+        <div><h1>Projects</h1><p>Plan, track, and deliver work with confidence.</p></div>
         <button className="btn btn-primary" onClick={() => setShowModal(true)}>+ New Project</button>
       </div>
+
+      {error && <div className="alert alert-error">{error}</div>}
 
       <div style={{ marginBottom: 16 }}>
         <input className="input" placeholder="Search projects..." value={search} onChange={e => setSearch(e.target.value)} style={{ maxWidth: 400 }} />
@@ -60,7 +67,7 @@ export default function ProjectsPage() {
                   <td>{p.code || '—'}</td>
                   <td>{p.status}</td>
                   <td><span className={`badge badge-${p.priority?.toLowerCase()}`}>{p.priority}</span></td>
-                  <td>{p.progress_percent}%</td>
+                  <td><div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><div className="progress" style={{ width: 88 }}><span style={{ width: `${p.progress_percent || 0}%` }} /></div>{p.progress_percent || 0}%</div></td>
                   <td>
                     <Link to={`/projects/${p.id}/kanban`} className="btn btn-secondary btn-sm" style={{ marginRight: 8 }}>Kanban</Link>
                     <button className="btn btn-danger btn-sm" onClick={() => handleDelete(p.id)}>Delete</button>
@@ -101,7 +108,7 @@ export default function ProjectsPage() {
               </div>
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                 <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>Cancel</button>
-                <button type="submit" className="btn btn-primary">Create</button>
+                <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'Creating…' : 'Create project'}</button>
               </div>
             </form>
           </div>

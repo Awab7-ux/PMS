@@ -7,6 +7,7 @@ export default function ProjectDetailPage() {
   const [project, setProject] = useState(null);
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     Promise.all([
@@ -15,11 +16,11 @@ export default function ProjectDetailPage() {
     ]).then(([pRes, tRes]) => {
       setProject(pRes.data);
       setTasks(tRes.data || []);
-    }).finally(() => setLoading(false));
+    }).catch(err => setError(err.message || 'Unable to load this project.')).finally(() => setLoading(false));
   }, [id]);
 
   if (loading) return <div className="loader">Loading...</div>;
-  if (!project) return <div className="empty-state">Project not found</div>;
+  if (!project) return <div className="card empty-state">{error || 'Project not found'}</div>;
 
   return (
     <div>
@@ -37,7 +38,7 @@ export default function ProjectDetailPage() {
       <div className="grid-4" style={{ marginBottom: 24 }}>
         <div className="card stat-card"><div className="value">{project.status}</div><div className="label">Status</div></div>
         <div className="card stat-card"><div className="value">{project.priority}</div><div className="label">Priority</div></div>
-        <div className="card stat-card"><div className="value">{project.progress_percent}%</div><div className="label">Progress</div></div>
+        <div className="card stat-card"><div className="value">{project.progress_percent || 0}%</div><div className="label">Progress</div><div className="progress" style={{ marginTop: 10 }}><span style={{ width: `${project.progress_percent || 0}%` }} /></div></div>
         <div className="card stat-card"><div className="value">{tasks.length}</div><div className="label">Tasks</div></div>
       </div>
 

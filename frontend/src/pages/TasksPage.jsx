@@ -9,14 +9,16 @@ export default function TasksPage() {
   const [projectId, setProjectId] = useState('');
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    if (!orgId) return;
+    if (!orgId) { setLoading(false); return; }
+    setLoading(true);
     projectApi.list({ organization_id: orgId, per_page: 100 }).then(r => {
       const list = r.data || [];
       setProjects(list);
       if (list.length) setProjectId(list[0].id);
-    });
+    }).catch(err => { setError(err.message || 'Unable to load projects.'); setLoading(false); });
   }, [orgId]);
 
   useEffect(() => {
@@ -24,6 +26,7 @@ export default function TasksPage() {
     setLoading(true);
     taskApi.list({ project_id: projectId, per_page: 50 })
       .then(r => setTasks(r.data || []))
+      .catch(err => setError(err.message || 'Unable to load tasks.'))
       .finally(() => setLoading(false));
   }, [projectId]);
 
@@ -32,8 +35,10 @@ export default function TasksPage() {
   return (
     <div>
       <div className="page-header">
-        <div><h1>Tasks</h1><p>All tasks across projects</p></div>
+        <div><h1>Tasks</h1><p>Stay focused on what needs attention next.</p></div>
       </div>
+
+      {error && <div className="alert alert-error">{error}</div>}
 
       <div style={{ marginBottom: 16 }}>
         <select className="select" value={projectId} onChange={e => setProjectId(e.target.value)} style={{ maxWidth: 300 }}>

@@ -10,8 +10,10 @@ export default function TeamsPage() {
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ name: '', description: '' });
   const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const load = () => {
+    setLoading(true);
     teamApi.list()
       .then(r => setTeams(r.data || []))
       .catch(err => setError(err.message))
@@ -23,6 +25,7 @@ export default function TeamsPage() {
   const handleCreate = async (e) => {
     e.preventDefault();
     setError('');
+    setSaving(true);
     try {
       await teamApi.create({ ...form, organization_id: orgId });
       setShowModal(false);
@@ -30,7 +33,7 @@ export default function TeamsPage() {
       load();
     } catch (err) {
       setError(err.message);
-    }
+    } finally { setSaving(false); }
   };
 
   const handleDelete = async (id) => {
@@ -44,7 +47,7 @@ export default function TeamsPage() {
   return (
     <div>
       <div className="page-header">
-        <div><h1>Teams</h1><p>Manage your organization teams</p></div>
+        <div><h1>Teams</h1><p>Bring the right people together around shared work.</p></div>
         <button className="btn btn-primary" onClick={() => setShowModal(true)}>+ New Team</button>
       </div>
 
@@ -82,7 +85,7 @@ export default function TeamsPage() {
               </div>
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                 <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>Cancel</button>
-                <button type="submit" className="btn btn-primary">Create</button>
+                <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'Creating…' : 'Create team'}</button>
               </div>
             </form>
           </div>

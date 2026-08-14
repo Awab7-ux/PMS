@@ -21,8 +21,9 @@ export default function CalendarPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (!orgId) return;
+    if (!orgId) { setLoading(false); return; }
     setLoading(true);
+    setError('');
     calendarApi.events({ organization_id: orgId, start: range.start, end: range.end })
       .then(r => setEvents(r.data?.events || r.data || []))
       .catch(err => setError(err.message))
@@ -47,7 +48,7 @@ export default function CalendarPage() {
   return (
     <div>
       <div className="page-header">
-        <div><h1>Calendar</h1><p>Task deadlines and project milestones</p></div>
+        <div><h1>Calendar</h1><p>Task deadlines and project milestones at a glance.</p></div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <button className="btn btn-secondary btn-sm" onClick={() => shiftMonth(-1)}>← Prev</button>
           <strong>{range.label}</strong>

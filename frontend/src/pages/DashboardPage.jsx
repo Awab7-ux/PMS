@@ -7,11 +7,12 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pi
 const COLORS = ['#6366f1', '#22c55e', '#f59e0b', '#ef4444', '#3b82f6'];
 
 export default function DashboardPage() {
-  const { orgId } = useAuth();
+  const { orgId, user } = useAuth();
   const [stats, setStats] = useState(null);
   const [projects, setProjects] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     if (!orgId) {
@@ -20,14 +21,12 @@ export default function DashboardPage() {
     }
     setLoading(true);
     Promise.all([
-      reportApi.analytics(orgId).catch(() => ({ data: {} })),
-      projectApi.list({ organization_id: orgId, per_page: 5 }).catch(() => ({ data: [] })),
-      notificationApi.list({ per_page: 5 }).catch(() => ({ data: [] })),
+      reportApi.analytics(orgId), projectApi.list({ organization_id: orgId, per_page: 5 }), notificationApi.list({ per_page: 5 }),
     ]).then(([analytics, projRes, notifRes]) => {
       setStats(analytics.data);
       setProjects(Array.isArray(projRes.data) ? projRes.data : []);
       setNotifications(Array.isArray(notifRes.data) ? notifRes.data : []);
-    }).finally(() => setLoading(false));
+    }).catch(err => setError(err.message || 'Dashboard data could not be loaded.')).finally(() => setLoading(false));
   }, [orgId]);
 
   if (loading) return <div className="loader">Loading dashboard...</div>;
@@ -59,10 +58,12 @@ export default function DashboardPage() {
     <div>
       <div className="page-header">
         <div>
-          <h1>Dashboard</h1>
-          <p>Overview of your projects and tasks</p>
+          <h1>Good morning, {user?.full_name?.split(' ')[0] || 'there'}</h1>
+          <p>Here is a clear view of your team’s work today.</p>
         </div>
       </div>
+
+      {error && <div className="alert alert-error">{error}</div>}
 
       <div className="grid-4" style={{ marginBottom: 24 }}>
         <div className="card stat-card">
@@ -78,8 +79,8 @@ export default function DashboardPage() {
           <div className="label">Total Tasks</div>
         </div>
         <div className="card stat-card">
-          <div className="value">{stats?.overdue_tasks ?? 0}</div>
-          <div className="label">Overdue Tasks</div>
+          <div className="value">{stats?.completed_tasks ?? 0}</div>
+          <div className="label">Completed Tasks</div>
         </div>
       </div>
 
@@ -130,7 +131,7 @@ export default function DashboardPage() {
                     <tr key={p.id}>
                       <td><Link to={`/projects/${p.id}`}>{p.name}</Link></td>
                       <td><span className={`badge badge-${p.status?.toLowerCase().replace(' ', '_')}`}>{p.status}</span></td>
-                      <td>{p.progress_percent}%</td>
+                      <td><div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><div className="progress" style={{ width: 80 }}><span style={{ width: `${p.progress_percent || 0}%` }} /></div>{p.progress_percent || 0}%</div></td>
                     </tr>
                   ))}
                 </tbody>
