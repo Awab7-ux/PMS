@@ -28,8 +28,14 @@ export default function KanbanPage() {
 
   const handleDrop = async (status, order) => {
     if (!dragTask) return;
-    try { await taskApi.move(dragTask.id, { status, kanban_order: order }); load(); }
-    catch (err) { setError(err.message || 'Unable to move this task.'); }
+    const previousBoard = board;
+    const nextBoard = Object.fromEntries(COLUMNS.map(column => [column, [...(board[column] || [])]]));
+    for (const column of COLUMNS) nextBoard[column] = nextBoard[column].filter(task => task.id !== dragTask.id);
+    const destination = nextBoard[status];
+    destination.splice(Math.min(order, destination.length), 0, { ...dragTask, status });
+    setBoard(nextBoard);
+    try { await taskApi.move(dragTask.id, { status, kanban_order: Math.min(order, destination.length - 1) }); }
+    catch (err) { setBoard(previousBoard); setError(err.message || 'Unable to move this task. Your board was restored.'); }
     finally { setDragTask(null); }
   };
 
@@ -70,6 +76,7 @@ export default function KanbanPage() {
                   <h4>{task.title}</h4>
                   <div className="kanban-card-meta">
                     <span className={`badge badge-${task.priority?.toLowerCase()}`}>{task.priority}</span>
+                    <span>{task.assignee?.full_name || 'Unassigned'}</span>
                     {task.due_date && <span>📅 {task.due_date}</span>}
                     {task.progress_percent > 0 && <span>{task.progress_percent}%</span>}
                   </div>

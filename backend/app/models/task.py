@@ -80,6 +80,7 @@ class Task(db.Model):
         data = {
             "id": str(self.id),
             "project_id": str(self.project_id),
+            "project": self.project.to_dict() if self.project else None,
             "organization_id": str(self.organization_id),
             "team_id": str(self.team_id) if self.team_id else None,
             "title": self.title,

@@ -41,6 +41,7 @@ class TaskRepository:
         status: str | None = None,
         priority: str | None = None,
         assignee_id: str | None = None,
+        due_date: date | None = None,
         search: str | None = None,
         sort_by: str = "kanban_order",
         sort_dir: str = "asc",
@@ -62,11 +63,21 @@ class TaskRepository:
                 query = query.where(Task.assignee_id == uuid.UUID(str(assignee_id)))
             except (ValueError, TypeError):
                 pass
+        if due_date:
+            query = query.where(Task.due_date == due_date)
         if search:
             term = f"%{search.strip()}%"
             query = query.where(or_(Task.title.ilike(term), Task.description.ilike(term)))
 
-        sort_col = getattr(Task, sort_by, Task.kanban_order)
+        sortable_columns = {
+            "kanban_order": Task.kanban_order,
+            "due_date": Task.due_date,
+            "created_at": Task.created_at,
+            "updated_at": Task.updated_at,
+            "priority": Task.priority,
+            "title": Task.title,
+        }
+        sort_col = sortable_columns.get(sort_by, Task.kanban_order)
         query = query.order_by(sort_col.desc() if sort_dir == "desc" else sort_col.asc())
 
         all_tasks = db.session.execute(query).scalars().all()

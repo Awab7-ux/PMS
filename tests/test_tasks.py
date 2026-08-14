@@ -195,3 +195,77 @@ def test_comments(client):
     )
     assert list_resp.status_code == 200
     assert len(list_resp.get_json()["data"]) == 1
+
+
+def test_update_status_priority_and_due_date_filter(client):
+    token = register_and_login(client, "update@example.com", "updateuser", "Update User")
+    org_id = create_org(client, token, "Update Org", "update-org")
+    project_id = create_project(client, token, org_id, "Update Project")
+    headers = {"Authorization": f"Bearer {token}"}
+    task_id = client.post("/api/v1/tasks", json={"project_id": project_id, "title": "Before"}, headers=headers).get_json()["data"]["id"]
+
+    response = client.patch(
+        f"/api/v1/tasks/{task_id}",
+        json={"title": "After", "status": "REVIEW", "priority": "HIGH", "due_date": "2030-01-15"},
+        headers=headers,
+    )
+    assert response.status_code == 200
+    assert response.get_json()["data"]["status"] == "REVIEW"
+    assert response.get_json()["data"]["priority"] == "HIGH"
+
+    filtered = client.get(f"/api/v1/tasks?project_id={project_id}&due_date=2030-01-15", headers=headers)
+    assert filtered.status_code == 200
+    assert [item["id"] for item in filtered.get_json()["data"]] == [task_id]
+
+
+def test_priority_validation_and_missing_task(client):
+    token = register_and_login(client, "validation@example.com", "validationuser", "Validation User")
+    org_id = create_org(client, token, "Validation Org", "validation-org")
+    project_id = create_project(client, token, org_id, "Validation Project")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    invalid = client.post("/api/v1/tasks", json={"project_id": project_id, "title": "Bad", "priority": "ASAP"}, headers=headers)
+    assert invalid.status_code == 400
+    missing = client.get("/api/v1/tasks/not-a-task-id", headers=headers)
+    assert missing.status_code == 404
+
+
+def test_delete_task_removes_it_from_task_list(client):
+    token = register_and_login(client, "delete@example.com", "deleteuser", "Delete User")
+    org_id = create_org(client, token, "Delete Org", "delete-org")
+    project_id = create_project(client, token, org_id, "Delete Project")
+    headers = {"Authorization": f"Bearer {token}"}
+    task_id = client.post("/api/v1/tasks", json={"project_id": project_id, "title": "Remove me"}, headers=headers).get_json()["data"]["id"]
+
+    assert client.delete(f"/api/v1/tasks/{task_id}", headers=headers).status_code == 200
+    assert client.get(f"/api/v1/tasks/{task_id}", headers=headers).status_code == 404
+    assert client.get(f"/api/v1/tasks?project_id={project_id}", headers=headers).get_json()["data"] == []
+
+
+def test_task_access_is_isolated_between_organizations(client):
+    owner_token = register_and_login(client, "private-owner@example.com", "privateowner", "Private Owner")
+    org_id = create_org(client, owner_token, "Private Org", "private-org")
+    project_id = create_project(client, owner_token, org_id, "Private Project")
+    owner_headers = {"Authorization": f"Bearer {owner_token}"}
+    task_id = client.post("/api/v1/tasks", json={"project_id": project_id, "title": "Private"}, headers=owner_headers).get_json()["data"]["id"]
+    outsider_token = register_and_login(client, "private-outsider@example.com", "privateoutsider", "Private Outsider")
+    outsider_headers = {"Authorization": f"Bearer {outsider_token}"}
+
+    assert client.get(f"/api/v1/tasks/{task_id}", headers=outsider_headers).status_code == 403
+    assert client.patch(f"/api/v1/tasks/{task_id}", json={"status": "DONE"}, headers=outsider_headers).status_code == 403
+    assert client.delete(f"/api/v1/tasks/{task_id}", headers=outsider_headers).status_code == 403
+
+
+def test_task_accepts_assignee_in_same_organization(client):
+    owner_token = register_and_login(client, "assign-owner@example.com", "assignowner", "Assign Owner")
+    org_id = create_org(client, owner_token, "Assign Org", "assign-org")
+    project_id = create_project(client, owner_token, org_id, "Assign Project")
+    member_token = register_and_login(client, "assign-member@example.com", "assignmember", "Assign Member")
+    member_id = client.get("/api/v1/users/me", headers={"Authorization": f"Bearer {member_token}"}).get_json()["data"]["id"]
+    owner_headers = {"Authorization": f"Bearer {owner_token}"}
+    add_member = client.post(f"/api/v1/organizations/{org_id}/members", json={"user_id": member_id, "role": "Team Member"}, headers=owner_headers)
+    assert add_member.status_code == 201
+
+    response = client.post("/api/v1/tasks", json={"project_id": project_id, "title": "Assigned", "assignee_id": member_id}, headers=owner_headers)
+    assert response.status_code == 201
+    assert response.get_json()["data"]["assignee_id"] == member_id

@@ -111,13 +111,21 @@ class TaskService:
             raise ValueError("project_id is required")
         project = self.rbac.require_project_access(user_id, project_id)
 
+        status = (query_params.get("status") or "").upper()
+        if status and status not in TASK_STATUSES:
+            raise ValueError(f"Status must be one of: {', '.join(TASK_STATUSES)}")
+        priority = (query_params.get("priority") or "").upper()
+        if priority and priority not in TASK_PRIORITIES:
+            raise ValueError(f"Priority must be one of: {', '.join(TASK_PRIORITIES)}")
+
         page = max(int(query_params.get("page") or 1), 1)
         per_page = min(max(int(query_params.get("per_page") or 20), 1), 100)
         tasks, total = self.repo.list_for_project(
             project_id,
-            status=query_params.get("status"),
-            priority=query_params.get("priority"),
+            status=status or None,
+            priority=priority or None,
             assignee_id=query_params.get("assignee_id"),
+            due_date=self._parse_date(query_params.get("due_date")) if query_params.get("due_date") else None,
             search=query_params.get("search"),
             sort_by=query_params.get("sort_by") or "kanban_order",
             sort_dir=query_params.get("sort_dir") or "asc",
@@ -141,7 +149,10 @@ class TaskService:
         if not task:
             raise ValueError("Task not found")
         project = self.rbac.require_project_access(user_id, str(task.project_id))
-        self._check_perm(user_id, project.organization_id, "task.update")
+        if any(key != "assignee_id" for key in payload):
+            self._check_perm(user_id, project.organization_id, "task.update")
+        if "assignee_id" in payload:
+            self._check_perm(user_id, project.organization_id, "task.assign")
 
         old_status = task.status
         if "title" in payload and payload.get("title"):
@@ -196,6 +207,11 @@ class TaskService:
         return {"message": "Task deleted"}
 
     def assign_task(self, user_id: str, task_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        task = self.repo.get_by_id(task_id)
+        if not task:
+            raise ValueError("Task not found")
+        project = self.rbac.require_project_access(user_id, str(task.project_id))
+        self._check_perm(user_id, project.organization_id, "task.assign")
         return self.update_task(user_id, task_id, {"assignee_id": payload.get("assignee_id")})
 
     def create_subtask(self, user_id: str, task_id: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -295,6 +311,8 @@ class TaskService:
 
         if old_status != new_status:
             self.notifications.notify_status_changed(task)
+            self._log(project.organization_id, user_id, "task.status_changed", "task", task.id, {"from": old_status, "to": new_status})
+        self._log(project.organization_id, user_id, "task.moved", "task", task.id, {"status": new_status, "kanban_order": task.kanban_order})
 
         db.session.commit()
         return task.to_dict()
