@@ -1,93 +1,31 @@
-import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
-import { taskApi, commentApi } from '../services/api';
+import { useCallback, useEffect, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import { commentApi, taskApi, userApi } from '../services/api';
+
+const statuses = ['BACKLOG', 'TODO', 'IN_PROGRESS', 'REVIEW', 'DONE'];
+const priorities = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
 
 export default function TaskDetailPage() {
-  const { id } = useParams();
-  const [task, setTask] = useState(null);
-  const [comments, setComments] = useState([]);
-  const [newComment, setNewComment] = useState('');
-  const [newSubtask, setNewSubtask] = useState('');
-  const [loading, setLoading] = useState(true);
-
-  const load = () => {
-    Promise.all([
-      taskApi.get(id),
-      commentApi.list(id),
-    ]).then(([tRes, cRes]) => {
-      setTask(tRes.data);
-      setComments(cRes.data || []);
-    }).finally(() => setLoading(false));
-  };
-
-  useEffect(() => { load(); }, [id]);
-
-  const handleComment = async (e) => {
-    e.preventDefault();
-    if (!newComment.trim()) return;
-    await commentApi.create(id, { content: newComment });
-    setNewComment('');
-    load();
-  };
-
-  const handleSubtask = async (e) => {
-    e.preventDefault();
-    if (!newSubtask.trim()) return;
-    await taskApi.createSubtask(id, { title: newSubtask });
-    setNewSubtask('');
-    load();
-  };
-
-  const toggleSubtask = async (sub) => {
-    await taskApi.updateSubtask(id, sub.id, { is_completed: !sub.is_completed });
-    load();
-  };
-
-  if (loading) return <div className="loader">Loading...</div>;
-  if (!task) return <div className="empty-state">Task not found</div>;
-
-  return (
-    <div>
-      <div className="page-header">
-        <div>
-          <h1>{task.title}</h1>
-          <p>{task.description || 'No description'}</p>
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <span className={`badge badge-${task.status?.toLowerCase()}`}>{task.status}</span>
-          <span className={`badge badge-${task.priority?.toLowerCase()}`}>{task.priority}</span>
-        </div>
-      </div>
-
-      <div className="grid-2">
-        <div className="card">
-          <h3 style={{ marginBottom: 16 }}>Subtasks ({task.progress_percent}%)</h3>
-          {(task.subtasks || []).map(sub => (
-            <label key={sub.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0' }}>
-              <input type="checkbox" checked={sub.is_completed} onChange={() => toggleSubtask(sub)} />
-              <span style={{ textDecoration: sub.is_completed ? 'line-through' : 'none' }}>{sub.title}</span>
-            </label>
-          ))}
-          <form onSubmit={handleSubtask} style={{ marginTop: 12, display: 'flex', gap: 8 }}>
-            <input className="input" placeholder="Add subtask..." value={newSubtask} onChange={e => setNewSubtask(e.target.value)} />
-            <button className="btn btn-primary btn-sm">Add</button>
-          </form>
-        </div>
-
-        <div className="card">
-          <h3 style={{ marginBottom: 16 }}>Comments</h3>
-          {comments.map(c => (
-            <div key={c.id} style={{ padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
-              <strong>{c.author_name || 'User'}</strong>
-              <p style={{ marginTop: 4 }}>{c.content}</p>
-            </div>
-          ))}
-          <form onSubmit={handleComment} style={{ marginTop: 12 }}>
-            <textarea className="textarea" placeholder="Write a comment..." value={newComment} onChange={e => setNewComment(e.target.value)} />
-            <button className="btn btn-primary btn-sm" style={{ marginTop: 8 }}>Post</button>
-          </form>
-        </div>
-      </div>
-    </div>
-  );
+  const { id } = useParams(); const navigate = useNavigate(); const { orgId } = useAuth();
+  const [task, setTask] = useState(null); const [comments, setComments] = useState([]); const [users, setUsers] = useState([]); const [loading, setLoading] = useState(true); const [error, setError] = useState('');
+  const [editing, setEditing] = useState(false); const [form, setForm] = useState({}); const [saving, setSaving] = useState(false); const [newComment, setNewComment] = useState(''); const [newSubtask, setNewSubtask] = useState('');
+  const load = useCallback(async () => { setLoading(true); setError(''); try { const [taskRes, commentsRes, usersRes] = await Promise.all([taskApi.get(id), commentApi.list(id), orgId ? userApi.list({ organization_id: orgId, per_page: 100 }) : Promise.resolve({ data: [] })]); setTask(taskRes.data); setComments(commentsRes.data || []); setUsers(usersRes.data || []); } catch (err) { setError(err.message || 'Unable to load this task right now.'); } finally { setLoading(false); } }, [id, orgId]);
+  useEffect(() => { load(); }, [load]);
+  const saveTask = async event => { event.preventDefault(); setSaving(true); try { await taskApi.update(id, { ...form, assignee_id: form.assignee_id || null, due_date: form.due_date || null }); setEditing(false); load(); } catch (err) { setError(err.message || 'Unable to save task changes.'); } finally { setSaving(false); } };
+  const addComment = async event => { event.preventDefault(); if (!newComment.trim()) return; setSaving(true); try { await commentApi.create(id, { content: newComment.trim() }); setNewComment(''); load(); } catch (err) { setError(err.message || 'Unable to post comment.'); } finally { setSaving(false); } };
+  const addSubtask = async event => { event.preventDefault(); if (!newSubtask.trim()) return; setSaving(true); try { await taskApi.createSubtask(id, { title: newSubtask.trim() }); setNewSubtask(''); load(); } catch (err) { setError(err.message || 'Unable to create subtask.'); } finally { setSaving(false); } };
+  const toggleSubtask = async subtask => { try { await taskApi.updateSubtask(id, subtask.id, { is_completed: !subtask.is_completed }); load(); } catch (err) { setError(err.message || 'Unable to update subtask.'); } };
+  const removeTask = async () => { if (!confirm('Delete this task? This action cannot be undone.')) return; setSaving(true); try { await taskApi.delete(id); navigate('/tasks'); } catch (err) { setError(err.message || 'Unable to delete this task.'); } finally { setSaving(false); } };
+  if (loading) return <div className="card"><div className="skeleton skeleton-line" /><div className="skeleton skeleton-line short" /></div>;
+  if (!task) return <div className="card empty-state">{error || 'Task not found'}</div>;
+  const completed = (task.subtasks || []).filter(subtask => subtask.is_completed).length;
+  return <div>
+    <div className="page-header"><div><p style={{ marginBottom: 8 }}><Link to={`/projects/${task.project_id}`}>Project</Link></p><h1>{task.title}</h1><p>{task.description || 'No description provided.'}</p></div><div><button className="btn btn-secondary" onClick={() => { setForm({ title: task.title, description: task.description || '', status: task.status, priority: task.priority, assignee_id: task.assignee_id || '', due_date: task.due_date || '' }); setEditing(true); }}>Edit task</button><button className="btn btn-danger" disabled={saving} onClick={removeTask}>Delete</button></div></div>
+    {error && <div className="alert alert-error">{error} <button className="btn btn-secondary btn-sm" onClick={load}>Try again</button></div>}
+    <div className="grid-4" style={{ marginBottom: 20 }}><div className="card stat-card"><div className="value"><span className={`badge badge-${task.status?.toLowerCase()}`}>{task.status}</span></div><div className="label">Status</div></div><div className="card stat-card"><div className="value"><span className={`badge badge-${task.priority?.toLowerCase()}`}>{task.priority}</span></div><div className="label">Priority</div></div><div className="card stat-card"><div className="value" style={{ fontSize: '1rem' }}>{task.assignee?.full_name || 'Unassigned'}</div><div className="label">Assignee</div></div><div className="card stat-card"><div className="value" style={{ fontSize: '1rem' }}>{task.due_date || 'No due date'}</div><div className="label">Due date</div></div></div>
+    <div className="grid-2"><section className="card"><h3>Subtasks <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>({completed}/{task.subtasks?.length || 0})</span></h3><div className="progress" style={{ margin: '12px 0 14px' }}><span style={{ width: `${task.progress_percent || 0}%` }} /></div>{(task.subtasks || []).length === 0 ? <p style={{ color: 'var(--text-muted)', fontSize: '.88rem' }}>Break this task into smaller, trackable steps.</p> : task.subtasks.map(subtask => <label key={subtask.id} style={{ display: 'flex', gap: 9, alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--border)' }}><input type="checkbox" checked={subtask.is_completed} onChange={() => toggleSubtask(subtask)} /><span style={{ textDecoration: subtask.is_completed ? 'line-through' : 'none' }}>{subtask.title}</span></label>)}<form onSubmit={addSubtask} style={{ display: 'flex', gap: 8, marginTop: 14 }}><input className="input" placeholder="Add subtask…" value={newSubtask} onChange={event => setNewSubtask(event.target.value)} /><button className="btn btn-secondary" disabled={saving}>Add</button></form></section>
+    <section className="card"><h3>Comments</h3>{comments.length === 0 ? <p style={{ marginTop: 12, color: 'var(--text-muted)', fontSize: '.88rem' }}>Start the conversation for this task.</p> : comments.map(comment => <div key={comment.id} className="timeline-item"><div className="timeline-avatar">{(comment.author_name || 'U').slice(0, 1)}</div><div className="timeline-copy"><strong>{comment.author_name || 'User'}</strong><p style={{ marginTop: 4 }}>{comment.content}</p><div className="timeline-meta">{comment.created_at ? new Date(comment.created_at).toLocaleString() : ''}</div></div></div>)}<form onSubmit={addComment} style={{ marginTop: 14 }}><textarea className="textarea" placeholder="Write a comment…" value={newComment} onChange={event => setNewComment(event.target.value)} /><button className="btn btn-primary btn-sm" style={{ marginTop: 8 }} disabled={saving}>{saving ? 'Posting…' : 'Post comment'}</button></form></section></div>
+    {editing && <div className="modal-overlay" onClick={() => setEditing(false)}><div className="modal" onClick={event => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="edit-task-title"><h2 id="edit-task-title">Edit task</h2><form onSubmit={saveTask}><div className="form-group"><label className="label">Title</label><input className="input" required value={form.title} onChange={event => setForm({ ...form, title: event.target.value })} /></div><div className="form-group"><label className="label">Description</label><textarea className="textarea" value={form.description} onChange={event => setForm({ ...form, description: event.target.value })} /></div><div className="form-row"><div className="form-group"><label className="label">Status</label><select className="select" value={form.status} onChange={event => setForm({ ...form, status: event.target.value })}>{statuses.map(value => <option key={value}>{value}</option>)}</select></div><div className="form-group"><label className="label">Priority</label><select className="select" value={form.priority} onChange={event => setForm({ ...form, priority: event.target.value })}>{priorities.map(value => <option key={value}>{value}</option>)}</select></div></div><div className="form-row"><div className="form-group"><label className="label">Assignee</label><select className="select" value={form.assignee_id} onChange={event => setForm({ ...form, assignee_id: event.target.value })}><option value="">Unassigned</option>{users.map(user => <option key={user.id} value={user.id}>{user.full_name} — {user.email}</option>)}</select></div><div className="form-group"><label className="label">Due date</label><input className="input" type="date" value={form.due_date} onChange={event => setForm({ ...form, due_date: event.target.value })} /></div></div><div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}><button type="button" className="btn btn-secondary" onClick={() => setEditing(false)}>Cancel</button><button className="btn btn-primary" disabled={saving}>{saving ? 'Saving…' : 'Save changes'}</button></div></form></div></div>}
+  </div>;
 }

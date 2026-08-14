@@ -41,6 +41,15 @@ class TaskService:
         if not self.rbac.has_permission(user_id, perm, organization_id=org_id):
             raise PermissionError("Insufficient permissions")
 
+    def _validated_assignee(self, organization_id, assignee_id):
+        """Only active members of the task's organization can be assigned."""
+        parsed = parse_uuid(assignee_id)
+        if assignee_id and not parsed:
+            raise ValueError("Invalid assignee")
+        if parsed:
+            self.rbac.require_org_membership(str(parsed), str(organization_id))
+        return parsed
+
     @staticmethod
     def _calc_progress(task: Task) -> int:
         if not task.subtasks:
@@ -77,7 +86,7 @@ class TaskService:
             status=status,
             priority=priority,
             creator_id=parse_uuid(user_id),
-            assignee_id=parse_uuid(payload.get("assignee_id")),
+            assignee_id=self._validated_assignee(project.organization_id, payload.get("assignee_id")),
             start_date=self._parse_date(payload.get("start_date")),
             due_date=self._parse_date(payload.get("due_date")),
             estimated_hours=payload.get("estimated_hours"),
@@ -150,7 +159,7 @@ class TaskService:
                 raise ValueError(f"Invalid priority")
             task.priority = priority
         if "assignee_id" in payload:
-            new_assignee = parse_uuid(payload.get("assignee_id"))
+            new_assignee = self._validated_assignee(project.organization_id, payload.get("assignee_id"))
             if new_assignee != task.assignee_id:
                 task.assignee_id = new_assignee
                 if new_assignee:
@@ -203,7 +212,7 @@ class TaskService:
         subtask = Subtask(
             task_id=task.id,
             title=title,
-            assignee_id=parse_uuid(payload.get("assignee_id")),
+            assignee_id=self._validated_assignee(project.organization_id, payload.get("assignee_id")),
             order_index=len(task.subtasks),
         )
         self.repo.create_subtask(subtask)
@@ -228,7 +237,7 @@ class TaskService:
         if "is_completed" in payload:
             subtask.is_completed = bool(payload["is_completed"])
         if "assignee_id" in payload:
-            subtask.assignee_id = parse_uuid(payload.get("assignee_id"))
+            subtask.assignee_id = self._validated_assignee(project.organization_id, payload.get("assignee_id"))
 
         self.repo.update_subtask(subtask)
         task.progress_percent = self._calc_progress(task)

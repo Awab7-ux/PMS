@@ -88,6 +88,8 @@ class Task(db.Model):
             "priority": self.priority,
             "creator_id": str(self.creator_id),
             "assignee_id": str(self.assignee_id) if self.assignee_id else None,
+            "creator": self.creator.to_dict() if self.creator else None,
+            "assignee": self.assignee.to_dict() if self.assignee else None,
             "start_date": self.start_date.isoformat() if self.start_date else None,
             "due_date": self.due_date.isoformat() if self.due_date else None,
             "estimated_hours": self.estimated_hours,
