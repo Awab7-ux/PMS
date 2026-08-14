@@ -21,6 +21,7 @@ export default function MainLayout() {
   const { user, logout, organization } = useAuth();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem('sidebar_collapsed') === 'true');
   const [unread, setUnread] = useState(0);
   const [searchQ, setSearchQ] = useState('');
 
@@ -38,20 +39,27 @@ export default function MainLayout() {
     if (searchQ.trim()) navigate(`/search?q=${encodeURIComponent(searchQ.trim())}`);
   };
 
+  const toggleCollapsed = () => {
+    const next = !sidebarCollapsed;
+    setSidebarCollapsed(next);
+    localStorage.setItem('sidebar_collapsed', String(next));
+  };
+
   return (
     <div className="layout">
-      <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
+      <aside className={`sidebar ${sidebarOpen ? 'open' : ''} ${sidebarCollapsed ? 'collapsed' : ''}`}>
         <div className="sidebar-brand">
           <span className="brand-icon">P</span>
-          <span>PMS</span>
+          <span className="sidebar-label">PMS</span>
+          <button type="button" className="sidebar-collapse" onClick={toggleCollapsed} aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}>{sidebarCollapsed ? '›' : '‹'}</button>
         </div>
         {organization && (
           <div className="sidebar-org">{organization.name}</div>
         )}
         <nav className="sidebar-nav">
           {NAV.map(item => (
-            <NavLink key={item.to} to={item.to} className={({ isActive }) => isActive ? 'active' : ''} onClick={() => setSidebarOpen(false)}>
-              <span className="nav-icon" aria-hidden="true">{item.icon}</span> {item.label}
+            <NavLink key={item.to} to={item.to} title={sidebarCollapsed ? item.label : undefined} className={({ isActive }) => isActive ? 'active' : ''} onClick={() => setSidebarOpen(false)}>
+              <span className="nav-icon" aria-hidden="true">{item.icon}</span> <span className="sidebar-label">{item.label}</span>
               {item.to === '/notifications' && unread > 0 && (
                 <span className="nav-badge">{unread}</span>
               )}

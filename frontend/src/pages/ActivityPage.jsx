@@ -33,15 +33,15 @@ export default function ActivityPage() {
       ) : (
         <div className="card" style={{ paddingTop: 8, paddingBottom: 8 }}>
           {items.map(a => (
-            <div key={a.id} style={{ padding: '12px 0', borderBottom: '1px solid var(--border)', display: 'flex', gap: 16 }}>
-              <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--primary)', marginTop: 8, flexShrink: 0 }} />
-              <div>
+            <div key={a.id} className="timeline-item">
+              <div className="timeline-avatar" aria-hidden="true">{(a.actor_name || 'S').slice(0, 1).toUpperCase()}</div>
+              <div className="timeline-copy">
                 <strong>{a.actor_name || 'System'}</strong>
                 <span style={{ color: 'var(--text-muted)' }}> — {a.action?.replace(/_/g, ' ')}</span>
                 {a.entity_type && (
                   <span style={{ color: 'var(--text-muted)' }}> ({a.entity_type}{a.entity_id ? ` #${a.entity_id.slice(0, 8)}` : ''})</span>
                 )}
-                <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: 4 }}>
+                <div className="timeline-meta">
                   {a.created_at ? new Date(a.created_at).toLocaleString() : ''}
                 </div>
               </div>

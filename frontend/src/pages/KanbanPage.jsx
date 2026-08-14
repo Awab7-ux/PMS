@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
 import { projectApi, taskApi } from '../services/api';
 
 const COLUMNS = ['BACKLOG', 'TODO', 'IN_PROGRESS', 'REVIEW', 'DONE'];
@@ -8,33 +7,38 @@ const COLUMN_LABELS = { BACKLOG: 'Backlog', TODO: 'Todo', IN_PROGRESS: 'In Progr
 
 export default function KanbanPage() {
   const { id: projectId } = useParams();
-  const { orgId } = useAuth();
   const [board, setBoard] = useState({});
   const [project, setProject] = useState(null);
   const [dragTask, setDragTask] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [newTask, setNewTask] = useState({ title: '', priority: 'MEDIUM', status: 'TODO' });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
 
   const load = () => {
-    taskApi.kanban(projectId).then(r => setBoard(r.data || {}));
-    projectApi.get(projectId).then(r => setProject(r.data)).catch(() => {});
+    setLoading(true); setError('');
+    Promise.all([taskApi.kanban(projectId), projectApi.get(projectId)])
+      .then(([tasks, projectRes]) => { setBoard(tasks.data || {}); setProject(projectRes.data); })
+      .catch(err => setError(err.message || 'Unable to load this board.'))
+      .finally(() => setLoading(false));
   };
 
   useEffect(() => { load(); }, [projectId]);
 
   const handleDrop = async (status, order) => {
     if (!dragTask) return;
-    await taskApi.move(dragTask.id, { status, kanban_order: order });
-    setDragTask(null);
-    load();
+    try { await taskApi.move(dragTask.id, { status, kanban_order: order }); load(); }
+    catch (err) { setError(err.message || 'Unable to move this task.'); }
+    finally { setDragTask(null); }
   };
 
   const handleCreate = async (e) => {
     e.preventDefault();
-    await taskApi.create({ ...newTask, project_id: projectId });
-    setShowModal(false);
-    setNewTask({ title: '', priority: 'MEDIUM', status: 'TODO' });
-    load();
+    setSaving(true);
+    try { await taskApi.create({ ...newTask, project_id: projectId }); setShowModal(false); setNewTask({ title: '', priority: 'MEDIUM', status: 'TODO' }); load(); }
+    catch (err) { setError(err.message || 'Unable to create task.'); }
+    finally { setSaving(false); }
   };
 
   return (
@@ -43,6 +47,9 @@ export default function KanbanPage() {
         <div><h1>Kanban — {project?.name || '...'}</h1></div>
         <button className="btn btn-primary" onClick={() => setShowModal(true)}>+ Add Task</button>
       </div>
+      {error && <div className="alert alert-error">{error}</div>}
+
+      {loading ? <div className="kanban-board">{COLUMNS.map(column => <div className="kanban-column" key={column}><div className="kanban-column-header">{COLUMN_LABELS[column]}</div><div className="kanban-column-body"><div className="skeleton skeleton-card" /><div className="skeleton skeleton-card" style={{ marginTop: 10 }} /></div></div>)}</div> :
 
       <div className="kanban-board">
         {COLUMNS.map(status => (
@@ -72,6 +79,7 @@ export default function KanbanPage() {
           </div>
         ))}
       </div>
+      }
 
       {showModal && (
         <div className="modal-overlay" onClick={() => setShowModal(false)}>
@@ -98,7 +106,7 @@ export default function KanbanPage() {
               </div>
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                 <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>Cancel</button>
-                <button type="submit" className="btn btn-primary">Create</button>
+                <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'Creating…' : 'Create task'}</button>
               </div>
             </form>
           </div>

@@ -66,7 +66,7 @@ export default function CalendarPage() {
             <div key={day} style={{ padding: '12px 0', borderBottom: '1px solid var(--border)' }}>
               <strong style={{ display: 'block', marginBottom: 8 }}>{new Date(day + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}</strong>
               {grouped[day].map((ev, i) => (
-                <div key={i} style={{ padding: '6px 12px', marginBottom: 4, background: 'var(--bg)', borderRadius: 'var(--radius)', display: 'flex', gap: 8, alignItems: 'center' }}>
+                <div key={i} className="calendar-event">
                   <span className={`badge badge-${ev.type === 'task_deadline' ? 'high' : 'medium'}`}>{ev.type?.replace('_', ' ')}</span>
                   <span>{ev.title}</span>
                   {ev.entity_type === 'task' && ev.entity_id && (
