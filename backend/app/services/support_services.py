@@ -4,7 +4,7 @@ from typing import Any
 from backend.app import db
 from backend.app.models.activity_log import ActivityLog
 from backend.app.models.comment import Comment
-from backend.app.models.notification import Notification
+from backend.app.models.notification import NOTIFICATION_TYPES, Notification
 from backend.app.repositories.support_repositories import ActivityRepository, CommentRepository, NotificationRepository
 from backend.app.repositories.task_repository import TaskRepository
 from backend.app.services.rbac_service import RBACService
@@ -16,8 +16,13 @@ class NotificationService:
         self.repo = NotificationRepository()
 
     def create(self, user_id: str, event_type: str, title: str, message: str | None = None, entity_type: str | None = None, entity_id: str | None = None, metadata: dict | None = None) -> Notification:
+        recipient_id = parse_uuid(user_id)
+        if not recipient_id:
+            raise ValueError("Invalid notification recipient")
+        if event_type not in NOTIFICATION_TYPES:
+            raise ValueError("Invalid notification type")
         notification = Notification(
-            user_id=parse_uuid(user_id),
+            user_id=recipient_id,
             event_type=event_type,
             title=title,
             message=message,
@@ -28,39 +33,40 @@ class NotificationService:
         self.repo.create(notification)
         return notification
 
-    def notify_task_assigned(self, task, assignee_id: str) -> None:
+    def notify_task_assigned(self, task, assignee_id: str, actor_id: str | None = None) -> None:
+        if str(assignee_id) == str(actor_id):
+            return
         self.create(
             assignee_id,
-            "task.assigned",
-            f"Task assigned: {task.title}",
-            f"You have been assigned to task '{task.title}'",
+            "TASK_ASSIGNED",
+            "You were assigned a task",
+            task.title,
             "task",
             str(task.id),
         )
 
-    def notify_status_changed(self, task) -> None:
-        if task.assignee_id:
-            self.create(
-                str(task.assignee_id),
-                "task.status_changed",
-                f"Task status changed: {task.title}",
-                f"Status changed to {task.status}",
-                "task",
-                str(task.id),
-            )
+    def notify_status_changed(self, task, actor_id: str | None = None) -> None:
+        recipients = {str(user_id) for user_id in (task.creator_id, task.assignee_id) if user_id and str(user_id) != str(actor_id)}
+        for recipient_id in recipients:
+            self.create(recipient_id, "TASK_STATUS_CHANGED", "Task status changed", f"{task.title} is now {task.status}", "task", str(task.id))
 
-    def notify_comment(self, task, comment, mentioned_ids: list[str]) -> None:
-        if task.assignee_id:
-            self.create(
-                str(task.assignee_id),
-                "comment.added",
-                f"New comment on: {task.title}",
-                comment.content[:100],
-                "task",
-                str(task.id),
-            )
-        for uid in mentioned_ids:
-            self.create(uid, "mention", f"You were mentioned in {task.title}", comment.content[:100], "comment", str(comment.id))
+    def notify_comment(self, task, comment, mentioned_ids: list[str], actor_id: str) -> None:
+        participants = {str(user_id) for user_id in (task.creator_id, task.assignee_id) if user_id and str(user_id) != str(actor_id)}
+        mentioned = {str(user_id) for user_id in mentioned_ids if str(user_id) != str(actor_id)}
+        for recipient_id in participants:
+            event_type = "TASK_MENTIONED" if recipient_id in mentioned else "TASK_COMMENTED"
+            title = "You were mentioned in a task" if event_type == "TASK_MENTIONED" else "New comment on a task"
+            self.create(recipient_id, event_type, title, comment.content[:100], "task", str(task.id))
+        for recipient_id in mentioned - participants:
+            self.create(recipient_id, "TASK_MENTIONED", "You were mentioned in a task", comment.content[:100], "task", str(task.id))
+
+    def notify_project_added(self, project, user_id: str, actor_id: str) -> None:
+        if str(user_id) != str(actor_id):
+            self.create(user_id, "PROJECT_ADDED", "You were added to a project", project.name, "project", str(project.id))
+
+    def notify_team_added(self, team, user_id: str, actor_id: str) -> None:
+        if str(user_id) != str(actor_id):
+            self.create(user_id, "TEAM_ADDED", "You were added to a team", team.name, "team", str(team.id))
 
     def list_notifications(self, user_id: str, query_params: dict[str, Any]) -> dict[str, Any]:
         page = max(int(query_params.get("page") or 1), 1)
@@ -105,13 +111,14 @@ class CommentService:
         self.notifications = NotificationService()
         self.activity = ActivityRepository()
 
-    def _extract_mentions(self, content: str) -> list[str]:
+    def _extract_mentions(self, content: str, organization_id: str) -> list[str]:
         from backend.app.repositories.user_repository import UserRepository
         user_repo = UserRepository()
         mentioned_ids = []
         for match in self.MENTION_PATTERN.findall(content):
             user = user_repo.get_by_username(match)
-            if user:
+            membership = self.rbac.org_repo.get_membership(organization_id, user.id) if user else None
+            if membership and membership.status == "active":
                 mentioned_ids.append(str(user.id))
         return mentioned_ids
 
@@ -128,11 +135,11 @@ class CommentService:
             raise ValueError("Content is required")
 
         comment = Comment(task_id=task.id, author_id=parse_uuid(user_id), content=content)
-        mentions = self._extract_mentions(content)
+        mentions = self._extract_mentions(content, project.organization_id)
         comment.mentions = mentions
         self.repo.create(comment)
 
-        self.notifications.notify_comment(task, comment, mentions)
+        self.notifications.notify_comment(task, comment, mentions, user_id)
         self.activity.create(ActivityLog(
             organization_id=project.organization_id,
             actor_id=parse_uuid(user_id),
@@ -166,7 +173,7 @@ class CommentService:
         if not content:
             raise ValueError("Content is required")
         comment.content = content
-        comment.mentions = self._extract_mentions(content)
+        comment.mentions = self._extract_mentions(content, project.organization_id)
         self.repo.update(comment)
         db.session.commit()
         return comment.to_dict()

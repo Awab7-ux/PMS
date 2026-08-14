@@ -8,6 +8,7 @@ from backend.app.models.team import Team, TeamMembership
 from backend.app.models.user import User
 from backend.app.repositories.organization_repository import OrganizationRepository, TeamRepository
 from backend.app.repositories.user_repository import UserRepository
+from backend.app.services.support_services import NotificationService
 
 
 class OrganizationService:
@@ -15,6 +16,7 @@ class OrganizationService:
         self.organization_repository = organization_repository or OrganizationRepository()
         self.team_repository = team_repository or TeamRepository()
         self.user_repository = user_repository or UserRepository()
+        self.notifications = NotificationService()
 
     def _get_user(self, user_id: str | uuid.UUID) -> User | None:
         return self.user_repository.get_by_id(str(user_id))
@@ -336,6 +338,7 @@ class OrganizationService:
             raise ValueError("Member already exists")
         membership = TeamMembership(team_id=team.id, user_id=target_user.id, role_in_team="member")
         self.team_repository.create_membership(membership)
+        self.notifications.notify_team_added(team, str(target_user.id), acting_user_id)
         db.session.commit()
         return membership.to_dict()
 

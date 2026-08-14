@@ -6,6 +6,7 @@ from backend.app.models.project import PROJECT_STATUSES, PROJECT_PRIORITIES, Pro
 from backend.app.repositories.organization_repository import OrganizationRepository
 from backend.app.repositories.project_repository import ProjectRepository
 from backend.app.repositories.user_repository import UserRepository
+from backend.app.services.support_services import NotificationService
 from backend.app.utils.uuid_helpers import parse_uuid
 
 
@@ -21,6 +22,7 @@ class ProjectService:
         self.project_repository = project_repository or ProjectRepository()
         self.organization_repository = organization_repository or OrganizationRepository()
         self.user_repository = user_repository or UserRepository()
+        self.notifications = NotificationService()
 
     @staticmethod
     def _parse_date(value: str | None) -> date | None:
@@ -247,6 +249,7 @@ class ProjectService:
             access_level=(payload.get("access_level") or "member").strip(),
         )
         self.project_repository.create_membership(membership)
+        self.notifications.notify_project_added(project, str(target_user.id), acting_user_id)
         db.session.commit()
         return membership.to_dict()
 

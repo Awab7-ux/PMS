@@ -132,6 +132,7 @@ class NotificationRepository:
 
     def mark_read(self, notification: Notification) -> None:
         notification.is_read = True
+        notification.read_at = datetime.now(timezone.utc)
         db.session.flush()
 
     def mark_all_read(self, user_id: str | uuid.UUID) -> int:
@@ -144,6 +145,7 @@ class NotificationRepository:
         ).scalars().all()
         for item in items:
             item.is_read = True
+            item.read_at = datetime.now(timezone.utc)
         db.session.flush()
         return len(items)
 

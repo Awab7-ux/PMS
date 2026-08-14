@@ -99,7 +99,7 @@ class TaskService:
             self.repo.add_tag_to_task(task.id, tag.id)
 
         if task.assignee_id:
-            self.notifications.notify_task_assigned(task, str(task.assignee_id))
+            self.notifications.notify_task_assigned(task, str(task.assignee_id), user_id)
 
         self._log(project.organization_id, user_id, "task.created", "task", task.id, {"title": title})
         db.session.commit()
@@ -174,7 +174,7 @@ class TaskService:
             if new_assignee != task.assignee_id:
                 task.assignee_id = new_assignee
                 if new_assignee:
-                    self.notifications.notify_task_assigned(task, str(new_assignee))
+                    self.notifications.notify_task_assigned(task, str(new_assignee), user_id)
         if "start_date" in payload:
             task.start_date = self._parse_date(payload.get("start_date"))
         if "due_date" in payload:
@@ -188,7 +188,7 @@ class TaskService:
         self.repo.update(task)
 
         if old_status != task.status:
-            self.notifications.notify_status_changed(task)
+            self.notifications.notify_status_changed(task, user_id)
             self._log(project.organization_id, user_id, "task.status_changed", "task", task.id, {"from": old_status, "to": task.status})
 
         self._log(project.organization_id, user_id, "task.updated", "task", task.id)
@@ -310,7 +310,7 @@ class TaskService:
             self.repo.update(t)
 
         if old_status != new_status:
-            self.notifications.notify_status_changed(task)
+            self.notifications.notify_status_changed(task, user_id)
             self._log(project.organization_id, user_id, "task.status_changed", "task", task.id, {"from": old_status, "to": new_status})
         self._log(project.organization_id, user_id, "task.moved", "task", task.id, {"status": new_status, "kanban_order": task.kanban_order})
 

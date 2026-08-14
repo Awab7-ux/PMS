@@ -120,8 +120,8 @@ export const commentApi = {
 export const notificationApi = {
   list: (params) => apiRequest(`/notifications?${new URLSearchParams(params)}`),
   unreadCount: () => apiRequest('/notifications/unread-count'),
-  markRead: (id) => apiRequest(`/notifications/${id}/read`, { method: 'POST' }),
-  markAllRead: () => apiRequest('/notifications/read-all', { method: 'POST' }),
+  markRead: (id) => apiRequest(`/notifications/${id}/read`, { method: 'PATCH' }),
+  markAllRead: () => apiRequest('/notifications/read-all', { method: 'PATCH' }),
 };
 
 export const teamApi = {

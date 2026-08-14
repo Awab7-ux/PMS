@@ -25,7 +25,7 @@ def unread_count():
     return build_response(True, {"count": count}, None, {}, 200)
 
 
-@bp.route("/<notification_id>/read", methods=["POST"])
+@bp.route("/<notification_id>/read", methods=["PATCH", "POST"])
 @jwt_required()
 def mark_read(notification_id):
     user_id = get_jwt_identity()
@@ -36,7 +36,7 @@ def mark_read(notification_id):
     return build_response(True, result, "Marked as read.", {}, 200)
 
 
-@bp.route("/read-all", methods=["POST"])
+@bp.route("/read-all", methods=["PATCH", "POST"])
 @jwt_required()
 def mark_all_read():
     user_id = get_jwt_identity()

@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { notificationApi } from '../services/api';
 import './MainLayout.css';
 
@@ -17,17 +17,48 @@ const NAV = [
   { to: '/settings', label: 'Settings', icon: '⚙️' },
 ];
 
+const notificationDestination = (notification) => {
+  if (notification.entity_type === 'task' && notification.entity_id) return `/tasks/${notification.entity_id}`;
+  if (notification.entity_type === 'project' && notification.entity_id) return `/projects/${notification.entity_id}`;
+  if (notification.entity_type === 'team') return '/teams';
+  return null;
+};
+
+const relativeTime = (value) => {
+  if (!value) return '';
+  const seconds = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 1000));
+  if (seconds < 60) return 'Just now';
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+  return `${Math.floor(seconds / 86400)}d ago`;
+};
+
 export default function MainLayout() {
   const { user, logout, organization } = useAuth();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem('sidebar_collapsed') === 'true');
   const [unread, setUnread] = useState(0);
+  const [notificationOpen, setNotificationOpen] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const [notificationLoading, setNotificationLoading] = useState(false);
+  const [notificationError, setNotificationError] = useState('');
   const [searchQ, setSearchQ] = useState('');
 
-  useEffect(() => {
-    notificationApi.unreadCount().then(r => setUnread(r.data?.count || 0)).catch(() => {});
+  const loadNotifications = useCallback(async () => {
+    setNotificationLoading(true); setNotificationError('');
+    try { const [countResponse, listResponse] = await Promise.all([notificationApi.unreadCount(), notificationApi.list({ per_page: 6 })]); setUnread(countResponse.data?.count || 0); setNotifications(listResponse.data || []); }
+    catch (err) { setNotificationError(err.message || 'Unable to load notifications.'); }
+    finally { setNotificationLoading(false); }
   }, []);
+
+  useEffect(() => { loadNotifications(); const timer = setInterval(loadNotifications, 60000); return () => clearInterval(timer); }, [loadNotifications]);
+  const openNotification = () => { setNotificationOpen(open => !open); if (!notificationOpen) loadNotifications(); };
+  const handleNotificationClick = async (notification) => {
+    try { if (!notification.is_read) await notificationApi.markRead(notification.id); const destination = notificationDestination(notification); setNotificationOpen(false); if (destination) navigate(destination); await loadNotifications(); }
+    catch (err) { setNotificationError(err.message || 'Unable to update notification.'); }
+  };
+  const markAllRead = async () => { try { await notificationApi.markAllRead(); await loadNotifications(); } catch (err) { setNotificationError(err.message || 'Unable to mark notifications as read.'); } };
 
   const handleLogout = async () => {
     await logout();
@@ -85,9 +116,7 @@ export default function MainLayout() {
             <input className="input" placeholder="Search..." value={searchQ} onChange={e => setSearchQ(e.target.value)} aria-label="Global search" />
           </form>
           <div className="header-right">
-            <NavLink to="/notifications" className="header-notif" aria-label="Notifications">
-              🔔 {unread > 0 && <span className="nav-badge">{unread}</span>}
-            </NavLink>
+            <div className="notification-menu"><button type="button" className="header-notif" onClick={openNotification} aria-label="Notifications" aria-expanded={notificationOpen}>🔔 {unread > 0 && <span className="nav-badge">{unread > 99 ? '99+' : unread}</span>}</button>{notificationOpen && <div className="notification-panel" role="dialog" aria-label="Recent notifications"><div className="notification-panel-header"><strong>Notifications</strong>{unread > 0 && <button type="button" className="btn btn-secondary btn-sm" onClick={markAllRead}>Mark all read</button>}</div>{notificationLoading ? <div className="notification-panel-state">Loading notifications…</div> : notificationError ? <div className="notification-panel-state"><span>{notificationError}</span><button type="button" className="btn btn-secondary btn-sm" onClick={loadNotifications}>Retry</button></div> : notifications.length === 0 ? <div className="notification-panel-state">You’re all caught up.</div> : <div className="notification-list">{notifications.map(notification => <button type="button" key={notification.id} className={`notification-item ${notification.is_read ? '' : 'unread'}`} onClick={() => handleNotificationClick(notification)}><span className="notification-icon">{notification.event_type.includes('TASK') ? '✓' : notification.event_type.includes('TEAM') ? '👥' : '📁'}</span><span><strong>{notification.title}</strong><small>{notification.message}</small><em>{relativeTime(notification.created_at)}</em></span></button>)}</div>}<NavLink to="/notifications" className="notification-panel-footer" onClick={() => setNotificationOpen(false)}>View all notifications</NavLink></div>}</div>
             <span className="user-name">{user?.full_name}</span>
             <button type="button" className="btn btn-secondary btn-sm" onClick={handleLogout}>Logout</button>
           </div>
