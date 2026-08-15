@@ -129,7 +129,7 @@ class ReportService:
         rows = db.session.execute(tasks).scalars().all()
         status, priority = {}, {}
         for task in rows: status[task.status] = status.get(task.status, 0) + 1; priority[task.priority] = priority.get(task.priority, 0) + 1
-        completed = sum(task.status == "DONE" for task in rows); overdue = sum(task.due_date and task.due_date < date.today() and task.status != "DONE" for task in rows)
+        completed = sum(task.status == "DONE" for task in rows); overdue = sum(bool(task.due_date and task.due_date < date.today() and task.status != "DONE") for task in rows)
         return {"status_distribution": [{"name": k, "value": v} for k,v in status.items()], "priority_distribution": [{"name": k, "value": v} for k,v in priority.items()], "completed": completed, "incomplete": len(rows)-completed, "overdue_count": overdue, "completion_rate": round(completed * 100 / len(rows), 1) if rows else 0}
 
     def get_project_analytics(self, user_id, query):
@@ -138,7 +138,7 @@ class ReportService:
         if project_id: projects = [p for p in projects if str(p.id) == str(project_id)]
         result=[]
         for project in projects:
-            tasks = db.session.execute(db.select(Task).where(Task.project_id == project.id, Task.deleted_at.is_(None))).scalars().all(); total=len(tasks); done=sum(t.status=="DONE" for t in tasks); overdue=sum(t.due_date and t.due_date < date.today() and t.status != "DONE" for t in tasks)
+            tasks = db.session.execute(db.select(Task).where(Task.project_id == project.id, Task.deleted_at.is_(None))).scalars().all(); total=len(tasks); done=sum(t.status=="DONE" for t in tasks); overdue=sum(bool(t.due_date and t.due_date < date.today() and t.status != "DONE") for t in tasks)
             result.append({"project_id":str(project.id),"name":project.name,"total_tasks":total,"completed_tasks":done,"completion_rate":round(done*100/total,1) if total else 0,"overdue_tasks":overdue})
         return {"items": result}
 
@@ -146,7 +146,7 @@ class ReportService:
         org_id, _ = self._scope(user_id, query); teams=db.session.execute(db.select(Team).where(Team.organization_id==org_id,Team.deleted_at.is_(None))).scalars().all(); result=[]
         for team in teams:
             tasks=db.session.execute(db.select(Task).where(Task.team_id==team.id,Task.deleted_at.is_(None))).scalars().all()
-            result.append({"team_id":str(team.id),"name":team.name,"members":db.session.execute(db.select(func.count(TeamMembership.id)).where(TeamMembership.team_id==team.id)).scalar() or 0,"assigned_tasks":len(tasks),"completed_tasks":sum(t.status=="DONE" for t in tasks),"in_progress_tasks":sum(t.status=="IN_PROGRESS" for t in tasks),"overdue_tasks":sum(t.due_date and t.due_date<date.today() and t.status!="DONE" for t in tasks)})
+            result.append({"team_id":str(team.id),"name":team.name,"members":db.session.execute(db.select(func.count(TeamMembership.id)).where(TeamMembership.team_id==team.id)).scalar() or 0,"assigned_tasks":len(tasks),"completed_tasks":sum(t.status=="DONE" for t in tasks),"in_progress_tasks":sum(t.status=="IN_PROGRESS" for t in tasks),"overdue_tasks":sum(bool(t.due_date and t.due_date<date.today() and t.status!="DONE") for t in tasks)})
         return {"items":result}
 
     def get_productivity(self, user_id, query):

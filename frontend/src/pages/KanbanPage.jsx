@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { projectApi, taskApi } from '../services/api';
+import { joinRoom, leaveRoom, onRealtime } from '../services/realtime';
 
 const COLUMNS = ['BACKLOG', 'TODO', 'IN_PROGRESS', 'REVIEW', 'DONE'];
 const COLUMN_LABELS = { BACKLOG: 'Backlog', TODO: 'Todo', IN_PROGRESS: 'In Progress', REVIEW: 'Review', DONE: 'Done' };
@@ -25,6 +26,7 @@ export default function KanbanPage() {
   };
 
   useEffect(() => { load(); }, [projectId]);
+  useEffect(() => { joinRoom('project', projectId); const apply = task => { if (task.project_id !== projectId) return; setBoard(current => { const next = Object.fromEntries(COLUMNS.map(column => [column, (current[column] || []).filter(item => item.id !== task.id)])); if (task.status) next[task.status] = [...(next[task.status] || []), task]; return next; }); }; const remove = payload => { if (payload.project_id === projectId) setBoard(current => Object.fromEntries(COLUMNS.map(column => [column, (current[column] || []).filter(task => task.id !== payload.task_id)]))); }; const off = ['task.created', 'task.updated', 'task.status_changed'].map(event => onRealtime(event, apply)); const offDelete = onRealtime('task.deleted', remove); return () => { leaveRoom('project', projectId); off.forEach(fn => fn()); offDelete(); }; }, [projectId]);
 
   const handleDrop = async (status, order) => {
     if (!dragTask) return;

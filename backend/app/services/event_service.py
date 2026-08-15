@@ -9,6 +9,7 @@ from backend.app.repositories.organization_repository import TeamRepository
 from backend.app.repositories.support_repositories import ActivityRepository
 from backend.app.services.rbac_service import RBACService
 from backend.app.services.support_services import NotificationService
+from backend.app.services.realtime_service import RealtimeService
 from backend.app.utils.uuid_helpers import parse_uuid
 
 
@@ -92,13 +93,17 @@ class EventService:
             raise ValueError("end_at must be on or after start_at")
         event = Event(organization_id=org_id, project_id=project.id if project else None, team_id=team.id if team else None, created_by_id=parse_uuid(user_id), title=title, description=(payload.get("description") or "").strip() or None, start_at=start_at, end_at=end_at, all_day=all_day, location=(payload.get("location") or "").strip() or None, reminder_settings={"offsets_minutes": [1440, 60]})
         self.repo.create(event); self._log(event, user_id, "event.created", {"title": title}); db.session.commit()
-        return event.to_dict()
+        result = event.to_dict(); RealtimeService.organization(str(event.organization_id), "calendar_event.created", result)
+        if event.project_id: RealtimeService.publish(f"project:{event.project_id}", "calendar_event.created", result)
+        return result
 
     def get(self, user_id, event_id):
         event = self.repo.get_by_id(event_id)
         if not event: raise ValueError("Event not found")
         self._access(user_id, event)
-        return event.to_dict()
+        result = event.to_dict(); RealtimeService.organization(str(event.organization_id), "calendar_event.updated", result)
+        if event.project_id: RealtimeService.publish(f"project:{event.project_id}", "calendar_event.updated", result)
+        return result
 
     def list(self, user_id, query):
         org_id = parse_uuid(query.get("organization_id"))
@@ -144,4 +149,6 @@ class EventService:
         if not event: raise ValueError("Event not found")
         self._access(user_id, event, "event.delete")
         self._log(event, user_id, "event.deleted", {"title": event.title}); self._notify_team(event, user_id, "EVENT_CANCELLED"); self.repo.delete(event); db.session.commit()
+        payload = {"event_id": str(event.id), "organization_id": str(event.organization_id)}; RealtimeService.organization(str(event.organization_id), "calendar_event.deleted", payload)
+        if event.project_id: RealtimeService.publish(f"project:{event.project_id}", "calendar_event.deleted", payload)
         return {"message": "Event deleted"}

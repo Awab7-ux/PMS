@@ -1,14 +1,18 @@
+import secrets
 import uuid
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from backend.app import db
 from backend.app.utils.uuid_helpers import parse_uuid
-from backend.app.models.organization import Organization, OrganizationMembership, Permission, Role, RolePermission
+from backend.app.models.activity_log import ActivityLog
+from backend.app.models.organization import Organization, OrganizationInvitation, OrganizationMembership, Permission, Role, RolePermission
 from backend.app.models.team import Team, TeamMembership
 from backend.app.models.user import User
 from backend.app.repositories.organization_repository import OrganizationRepository, TeamRepository
 from backend.app.repositories.user_repository import UserRepository
 from backend.app.services.support_services import NotificationService
+from backend.app.repositories.support_repositories import ActivityRepository
 
 
 class OrganizationService:
@@ -17,6 +21,17 @@ class OrganizationService:
         self.team_repository = team_repository or TeamRepository()
         self.user_repository = user_repository or UserRepository()
         self.notifications = NotificationService()
+        self.activity = ActivityRepository()
+
+    def _log(self, organization_id, actor_id, action, entity_type, entity_id, metadata=None):
+        self.activity.create(ActivityLog(organization_id=parse_uuid(organization_id), actor_id=parse_uuid(actor_id), action=action, entity_type=entity_type, entity_id=str(entity_id), metadata_json=metadata or {}))
+
+    @staticmethod
+    def _is_expired(invitation) -> bool:
+        expires_at = invitation.expires_at
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        return expires_at <= datetime.now(timezone.utc)
 
     def _get_user(self, user_id: str | uuid.UUID) -> User | None:
         return self.user_repository.get_by_id(str(user_id))
@@ -172,7 +187,13 @@ class OrganizationService:
         if not membership or membership.status != "active":
             raise PermissionError("Access denied")
         memberships = self.organization_repository.list_memberships(organization_id)
-        return [m.to_dict() for m in memberships]
+        result = []
+        for membership in memberships:
+            data = membership.to_dict()
+            if membership.user:
+                data["user"] = membership.user.to_dict()
+            result.append(data)
+        return result
 
     def add_member(self, acting_user_id: str, organization_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         acting_membership = self.organization_repository.get_membership(organization_id, acting_user_id)
@@ -228,6 +249,9 @@ class OrganizationService:
         target_membership.role_id = role.id
         target_membership.role = role
         self.organization_repository.update_membership(target_membership)
+        self.notifications.notify_organization_role_changed(target_membership.user_id, acting_user_id, role.name, organization_id)
+        self._log(organization_id, acting_user_id, "organization_member_role_changed", "organization_membership", target_membership.id, {"user_id": str(target_membership.user_id), "role": role.name})
+        db.session.commit()
         return target_membership.to_dict()
 
     def remove_member(self, acting_user_id: str, organization_id: str, user_id: str) -> dict[str, Any]:
@@ -241,7 +265,11 @@ class OrganizationService:
             raise ValueError("Member not found")
         if target_membership.is_owner:
             raise ValueError("Cannot remove organization owner")
+        target_user_id = target_membership.user_id
         self.organization_repository.remove_membership(target_membership)
+        self.notifications.notify_organization_member_removed(target_user_id, acting_user_id, organization_id)
+        self._log(organization_id, acting_user_id, "organization_member_removed", "organization_membership", target_membership.id, {"user_id": str(target_user_id)})
+        db.session.commit()
         return {"message": "Member removed"}
 
     def create_team(self, user_id: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -265,6 +293,7 @@ class OrganizationService:
             lead_user_id=lead_user_id,
         )
         self.team_repository.create(team)
+        self._log(organization.id, user_id, "team_created", "team", team.id)
         db.session.commit()
         return team.to_dict()
 
@@ -300,6 +329,8 @@ class OrganizationService:
         if "lead_user_id" in payload:
             team.lead_user_id = parse_uuid(payload.get("lead_user_id"))
         self.team_repository.update(team)
+        self._log(team.organization_id, user_id, "team_updated", "team", team.id)
+        db.session.commit()
         return team.to_dict()
 
     def delete_team(self, user_id: str, team_id: str) -> dict[str, Any]:
@@ -339,6 +370,7 @@ class OrganizationService:
         membership = TeamMembership(team_id=team.id, user_id=target_user.id, role_in_team="member")
         self.team_repository.create_membership(membership)
         self.notifications.notify_team_added(team, str(target_user.id), acting_user_id)
+        self._log(team.organization_id, acting_user_id, "member_added_to_team", "team", team.id, {"user_id": str(target_user.id)})
         db.session.commit()
         return membership.to_dict()
 
@@ -355,7 +387,75 @@ class OrganizationService:
         if not membership:
             raise ValueError("Member not found")
         self.team_repository.remove_membership(membership)
+        self.notifications.notify_team_member_removed(user_id, acting_user_id, team)
+        self._log(team.organization_id, acting_user_id, "member_removed_from_team", "team", team.id, {"user_id": str(user_id)})
+        db.session.commit()
         return {"message": "Member removed"}
+
+    def create_invitation(self, acting_user_id: str, organization_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        acting = self.organization_repository.get_membership(organization_id, acting_user_id)
+        if not acting or acting.status != "active":
+            raise PermissionError("Access denied")
+        if acting.role.name not in {"Organization Owner", "Project Manager"}:
+            raise PermissionError("Insufficient permissions")
+        email = (payload.get("email") or "").strip().lower()
+        if not email or "@" not in email:
+            raise ValueError("A valid email is required")
+        if self.user_repository.get_by_email(email) and self.organization_repository.get_membership(organization_id, self.user_repository.get_by_email(email).id):
+            raise ValueError("User is already a member of the organization")
+        existing = db.session.execute(db.select(OrganizationInvitation).where(OrganizationInvitation.organization_id == parse_uuid(organization_id), OrganizationInvitation.email == email, OrganizationInvitation.status == "pending")).scalar_one_or_none()
+        if existing and not self._is_expired(existing):
+            raise ValueError("An active invitation already exists")
+        if existing:
+            existing.status = "expired"
+        role = self._get_role(organization_id, payload.get("role") or "Team Member")
+        if not role or role.name == "Organization Owner":
+            raise ValueError("Invalid invitation role")
+        invitation = OrganizationInvitation(organization_id=parse_uuid(organization_id), inviter_id=parse_uuid(acting_user_id), email=email, role_id=role.id, token=secrets.token_urlsafe(32), status="pending", expires_at=datetime.now(timezone.utc) + timedelta(days=7))
+        db.session.add(invitation)
+        db.session.flush()
+        self._log(organization_id, acting_user_id, "organization_invitation_created", "organization_invitation", invitation.id, {"email": email})
+        db.session.commit()
+        data = invitation.to_dict()
+        data["token"] = invitation.token  # development-friendly handoff; never returned by list endpoints.
+        return data
+
+    def list_invitations(self, user_id: str, organization_id: str) -> list[dict[str, Any]]:
+        membership = self.organization_repository.get_membership(organization_id, user_id)
+        if not membership or membership.status != "active": raise PermissionError("Access denied")
+        if membership.role.name not in {"Organization Owner", "Project Manager"}: raise PermissionError("Insufficient permissions")
+        now = datetime.now(timezone.utc)
+        invitations = db.session.execute(db.select(OrganizationInvitation).where(OrganizationInvitation.organization_id == parse_uuid(organization_id)).order_by(OrganizationInvitation.created_at.desc())).scalars().all()
+        for invitation in invitations:
+            if invitation.status == "pending" and self._is_expired(invitation): invitation.status = "expired"
+        db.session.commit()
+        return [invitation.to_dict() for invitation in invitations]
+
+    def accept_invitation(self, user_id: str, token: str) -> dict[str, Any]:
+        invitation = db.session.execute(db.select(OrganizationInvitation).where(OrganizationInvitation.token == token)).scalar_one_or_none()
+        if not invitation or invitation.status != "pending" or self._is_expired(invitation):
+            if invitation and invitation.status == "pending": invitation.status = "expired"; db.session.commit()
+            raise ValueError("Invitation is invalid or expired")
+        user = self._get_user(user_id)
+        if not user or user.email.lower() != invitation.email.lower(): raise PermissionError("Invitation does not belong to this user")
+        if self.organization_repository.get_membership(invitation.organization_id, user.id): raise ValueError("User is already a member of the organization")
+        membership = OrganizationMembership(organization_id=invitation.organization_id, user_id=user.id, role_id=invitation.role_id, status="active", invited_by=invitation.inviter_id)
+        self.organization_repository.create_membership(membership)
+        invitation.status = "accepted"; invitation.accepted_at = datetime.now(timezone.utc)
+        self._log(invitation.organization_id, user_id, "organization_invitation_accepted", "organization_invitation", invitation.id)
+        db.session.commit()
+        return membership.to_dict()
+
+    def cancel_invitation(self, acting_user_id: str, invitation_id: str) -> dict[str, Any]:
+        invitation = db.session.get(OrganizationInvitation, parse_uuid(invitation_id))
+        if not invitation: raise ValueError("Invitation not found")
+        membership = self.organization_repository.get_membership(invitation.organization_id, acting_user_id)
+        if not membership or membership.status != "active" or membership.role.name not in {"Organization Owner", "Project Manager"}: raise PermissionError("Insufficient permissions")
+        if invitation.status != "pending": raise ValueError("Invitation is no longer pending")
+        invitation.status = "cancelled"
+        self._log(invitation.organization_id, acting_user_id, "organization_invitation_cancelled", "organization_invitation", invitation.id)
+        db.session.commit()
+        return {"message": "Invitation cancelled"}
 
     def list_team_members(self, user_id: str, team_id: str) -> list[dict[str, Any]]:
         team = self.team_repository.get_by_id(team_id)

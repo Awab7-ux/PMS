@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { teamApi, userApi } from '../services/api';
+import { teamApi, orgApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
 export default function TeamDetailPage() {
   const { id } = useParams();
-  const { orgId } = useAuth();
+  const { orgId, user: currentUser } = useAuth();
+  const [orgMembers, setOrgMembers] = useState([]);
   const [team, setTeam] = useState(null);
+  const [members, setMembers] = useState([]);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState('');
@@ -15,10 +17,13 @@ export default function TeamDetailPage() {
   const load = () => {
     Promise.all([
       teamApi.get(id),
-      orgId ? userApi.list({ organization_id: orgId, per_page: 100 }) : Promise.resolve({ data: [] }),
-    ]).then(([tRes, uRes]) => {
+      teamApi.listMembers(id),
+      orgId ? orgApi.members(orgId) : Promise.resolve({ data: [] }),
+    ]).then(([tRes, mRes, uRes]) => {
       setTeam(tRes.data);
-      setUsers(uRes.data || []);
+      setMembers(mRes.data || []);
+      setOrgMembers(uRes.data || []);
+      setUsers((uRes.data || []).map(m => m.user).filter(Boolean));
     }).catch(err => setError(err.message))
       .finally(() => setLoading(false));
   };
@@ -44,10 +49,10 @@ export default function TeamDetailPage() {
     load();
   };
 
+  const canManage = ['Organization Owner', 'Project Manager'].includes(orgMembers.find(m => m.user_id === currentUser?.id)?.role);
+
   if (loading) return <div className="loader">Loading...</div>;
   if (!team) return <div className="empty-state">Team not found</div>;
-
-  const members = team.members || [];
 
   return (
     <div>
@@ -74,16 +79,14 @@ export default function TeamDetailPage() {
                   <td>{m.full_name || m.user?.full_name}</td>
                   <td>{m.email || m.user?.email}</td>
                   <td>{m.role || 'Member'}</td>
-                  <td>
-                    <button className="btn btn-danger btn-sm" onClick={() => handleRemove(m.user_id || m.id)}>Remove</button>
-                  </td>
+                  <td>{canManage && <button className="btn btn-danger btn-sm" onClick={() => handleRemove(m.user_id || m.id)}>Remove</button>}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
 
-        <form onSubmit={handleAddMember} style={{ marginTop: 24, display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+        {canManage && <form onSubmit={handleAddMember} style={{ marginTop: 24, display: 'flex', gap: 8, alignItems: 'flex-end' }}>
           <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
             <label className="label">Add member</label>
             <select className="select" value={userId} onChange={e => setUserId(e.target.value)}>
@@ -94,7 +97,7 @@ export default function TeamDetailPage() {
             </select>
           </div>
           <button className="btn btn-primary">Add</button>
-        </form>
+        </form>}
       </div>
     </div>
   );

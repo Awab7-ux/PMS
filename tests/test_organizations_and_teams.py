@@ -1,6 +1,9 @@
 import pytest
+from datetime import datetime, timedelta, timezone
+import uuid
 
 from backend.app import create_app, db
+from backend.app.models.organization import OrganizationInvitation
 
 
 @pytest.fixture()
@@ -169,3 +172,48 @@ def test_cross_organization_team_access_prevention(client):
         headers={"Authorization": f"Bearer {owner_b_token}"},
     )
     assert response.status_code == 403
+
+
+def test_invitation_lifecycle_and_recipient_isolation(client):
+    owner_token = register_and_login(client, "invite-owner@example.com", "inviteowner", "Invite Owner")
+    org = client.post("/api/v1/organizations", json={"name": "Invite Org", "slug": "invite-org"}, headers={"Authorization": f"Bearer {owner_token}"}).get_json()["data"]
+    invitee_token = register_and_login(client, "invitee@example.com", "invitee", "Invitee")
+    other_token = register_and_login(client, "other@example.com", "otherinvite", "Other")
+
+    created = client.post(f"/api/v1/organizations/{org['id']}/invitations", json={"email": "invitee@example.com", "role": "Team Member"}, headers={"Authorization": f"Bearer {owner_token}"})
+    assert created.status_code == 201
+    token = created.get_json()["data"]["token"]
+    duplicate = client.post(f"/api/v1/organizations/{org['id']}/invitations", json={"email": "invitee@example.com"}, headers={"Authorization": f"Bearer {owner_token}"})
+    assert duplicate.status_code == 400
+    assert client.post(f"/api/v1/organizations/invitations/{token}/accept", headers={"Authorization": f"Bearer {other_token}"}).status_code == 403
+    accepted = client.post(f"/api/v1/organizations/invitations/{token}/accept", headers={"Authorization": f"Bearer {invitee_token}"})
+    assert accepted.status_code == 200
+    assert client.post(f"/api/v1/organizations/invitations/{token}/accept", headers={"Authorization": f"Bearer {invitee_token}"}).status_code == 400
+
+
+def test_member_controls_are_owner_only_and_owner_cannot_be_removed(client):
+    owner_token = register_and_login(client, "controls-owner@example.com", "controlsowner", "Controls Owner")
+    org = client.post("/api/v1/organizations", json={"name": "Controls", "slug": "controls"}, headers={"Authorization": f"Bearer {owner_token}"}).get_json()["data"]
+    member_token = register_and_login(client, "controls-member@example.com", "controlsmember", "Member")
+    client.post(f"/api/v1/organizations/{org['id']}/members", json={"user_id": "controls-member@example.com"}, headers={"Authorization": f"Bearer {owner_token}"})
+    owner_id = next(m["user_id"] for m in client.get(f"/api/v1/organizations/{org['id']}/members", headers={"Authorization": f"Bearer {owner_token}"}).get_json()["data"] if m["is_owner"])
+    assert client.delete(f"/api/v1/organizations/{org['id']}/members/{owner_id}", headers={"Authorization": f"Bearer {owner_token}"}).status_code == 400
+    assert client.get(f"/api/v1/organizations/{org['id']}/members", headers={"Authorization": f"Bearer {member_token}"}).status_code == 200
+    assert client.post(f"/api/v1/organizations/{org['id']}/invitations", json={"email": "x@example.com"}, headers={"Authorization": f"Bearer {member_token}"}).status_code == 403
+
+
+def test_invitation_listing_cancellation_and_expiry(client):
+    owner_token = register_and_login(client, "cancel-owner@example.com", "cancelowner", "Cancel Owner")
+    org = client.post("/api/v1/organizations", json={"name": "Cancel Org", "slug": "cancel-org"}, headers={"Authorization": f"Bearer {owner_token}"}).get_json()["data"]
+    invitee_token = register_and_login(client, "expired@example.com", "expired", "Expired")
+    created = client.post(f"/api/v1/organizations/{org['id']}/invitations", json={"email": "expired@example.com"}, headers={"Authorization": f"Bearer {owner_token}"}).get_json()["data"]
+    listed = client.get(f"/api/v1/organizations/{org['id']}/invitations", headers={"Authorization": f"Bearer {owner_token}"})
+    assert listed.status_code == 200 and listed.get_json()["data"][0]["email"] == "expired@example.com"
+    assert client.post(f"/api/v1/organizations/invitations/{created['id']}/cancel", headers={"Authorization": f"Bearer {owner_token}"}).status_code == 200
+    assert client.post(f"/api/v1/organizations/invitations/{created['token']}/accept", headers={"Authorization": f"Bearer {invitee_token}"}).status_code == 400
+    fresh = client.post(f"/api/v1/organizations/{org['id']}/invitations", json={"email": "expired@example.com"}, headers={"Authorization": f"Bearer {owner_token}"}).get_json()["data"]
+    with client.application.app_context():
+        invitation = db.session.get(OrganizationInvitation, uuid.UUID(fresh["id"]))
+        invitation.expires_at = datetime.now(timezone.utc) - timedelta(minutes=1)
+        db.session.commit()
+    assert client.post(f"/api/v1/organizations/invitations/{fresh['token']}/accept", headers={"Authorization": f"Bearer {invitee_token}"}).status_code == 400

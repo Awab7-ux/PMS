@@ -84,6 +84,19 @@ def add_team_member(team_id):
     return build_response(True, result, "Team member added successfully.", {}, 201)
 
 
+@bp.route("/<team_id>/members", methods=["GET"])
+@jwt_required()
+def list_team_members(team_id):
+    user_id = get_jwt_identity()
+    try:
+        result = service.list_team_members(user_id, team_id)
+    except PermissionError as exc:
+        return build_response(False, {}, str(exc), {}, 403)
+    except ValueError as exc:
+        return build_response(False, {}, str(exc), {}, 404)
+    return build_response(True, result, "Team members retrieved successfully.", {}, 200)
+
+
 @bp.route("/<team_id>/members/<user_id>", methods=["DELETE"])
 @jwt_required()
 def remove_team_member(team_id, user_id):

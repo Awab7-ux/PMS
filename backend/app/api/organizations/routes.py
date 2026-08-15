@@ -118,3 +118,49 @@ def remove_member(organization_id, user_id):
     except ValueError as exc:
         return build_response(False, {}, str(exc), {}, 400)
     return build_response(True, result, "Member removed successfully.", {}, 200)
+
+
+@bp.route("/<organization_id>/invitations", methods=["POST"])
+@jwt_required()
+def create_invitation(organization_id):
+    try:
+        result = service.create_invitation(get_jwt_identity(), organization_id, request.get_json(silent=True) or {})
+    except PermissionError as exc:
+        return build_response(False, {}, str(exc), {}, 403)
+    except ValueError as exc:
+        return build_response(False, {}, str(exc), {}, 400)
+    return build_response(True, result, "Invitation created successfully.", {}, 201)
+
+
+@bp.route("/<organization_id>/invitations", methods=["GET"])
+@jwt_required()
+def list_invitations(organization_id):
+    try:
+        result = service.list_invitations(get_jwt_identity(), organization_id)
+    except PermissionError as exc:
+        return build_response(False, {}, str(exc), {}, 403)
+    return build_response(True, result, "Invitations retrieved successfully.", {}, 200)
+
+
+@bp.route("/invitations/<invitation_id>/cancel", methods=["POST"])
+@jwt_required()
+def cancel_invitation(invitation_id):
+    try:
+        result = service.cancel_invitation(get_jwt_identity(), invitation_id)
+    except PermissionError as exc:
+        return build_response(False, {}, str(exc), {}, 403)
+    except ValueError as exc:
+        return build_response(False, {}, str(exc), {}, 400)
+    return build_response(True, result, "Invitation cancelled successfully.", {}, 200)
+
+
+@bp.route("/invitations/<token>/accept", methods=["POST"])
+@jwt_required()
+def accept_invitation(token):
+    try:
+        result = service.accept_invitation(get_jwt_identity(), token)
+    except PermissionError as exc:
+        return build_response(False, {}, str(exc), {}, 403)
+    except ValueError as exc:
+        return build_response(False, {}, str(exc), {}, 400)
+    return build_response(True, result, "Invitation accepted successfully.", {}, 200)

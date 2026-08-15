@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { teamApi } from '../services/api';
+import { teamApi, orgApi } from '../services/api';
 
 export default function TeamsPage() {
-  const { orgId } = useAuth();
+  const { orgId, user } = useAuth();
+  const [members, setMembers] = useState([]);
   const [teams, setTeams] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -14,13 +15,14 @@ export default function TeamsPage() {
 
   const load = () => {
     setLoading(true);
-    teamApi.list()
-      .then(r => setTeams(r.data || []))
+    Promise.all([teamApi.list(), orgId ? orgApi.members(orgId) : Promise.resolve({ data: [] })])
+      .then(([r, membership]) => { setTeams(r.data || []); setMembers(membership.data || []); })
       .catch(err => setError(err.message))
       .finally(() => setLoading(false));
   };
 
   useEffect(() => { load(); }, []);
+  const canManage = ['Organization Owner', 'Project Manager'].includes(members.find(m => m.user_id === user?.id)?.role);
 
   const handleCreate = async (e) => {
     e.preventDefault();
@@ -48,7 +50,7 @@ export default function TeamsPage() {
     <div>
       <div className="page-header">
         <div><h1>Teams</h1><p>Bring the right people together around shared work.</p></div>
-        <button className="btn btn-primary" onClick={() => setShowModal(true)}>+ New Team</button>
+        {canManage && <button className="btn btn-primary" onClick={() => setShowModal(true)}>+ New Team</button>}
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}
@@ -63,7 +65,7 @@ export default function TeamsPage() {
               <p style={{ color: 'var(--text-muted)', margin: '8px 0 16px' }}>{t.description || 'No description'}</p>
               <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between', alignItems: 'center' }}>
                 <span className="badge badge-medium">{t.member_count ?? 0} members</span>
-                <button className="btn btn-danger btn-sm" onClick={() => handleDelete(t.id)}>Archive</button>
+                {canManage && <button className="btn btn-danger btn-sm" onClick={() => handleDelete(t.id)}>Archive</button>}
               </div>
             </div>
           ))}

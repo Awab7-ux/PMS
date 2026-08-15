@@ -87,6 +87,14 @@ export const orgApi = {
   list: () => apiRequest('/organizations'),
   create: (data) => apiRequest('/organizations', { method: 'POST', body: JSON.stringify(data) }),
   get: (id) => apiRequest(`/organizations/${id}`),
+  members: (id) => apiRequest(`/organizations/${id}/members`),
+  addMember: (id, data) => apiRequest(`/organizations/${id}/members`, { method: 'POST', body: JSON.stringify(data) }),
+  updateMember: (id, userId, data) => apiRequest(`/organizations/${id}/members/${userId}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  removeMember: (id, userId) => apiRequest(`/organizations/${id}/members/${userId}`, { method: 'DELETE' }),
+  invitations: (id) => apiRequest(`/organizations/${id}/invitations`),
+  invite: (id, data) => apiRequest(`/organizations/${id}/invitations`, { method: 'POST', body: JSON.stringify(data) }),
+  cancelInvitation: (id) => apiRequest(`/organizations/invitations/${id}/cancel`, { method: 'POST' }),
+  acceptInvitation: (token) => apiRequest(`/organizations/invitations/${token}/accept`, { method: 'POST' }),
 };
 
 export const projectApi = {
@@ -131,6 +139,7 @@ export const teamApi = {
   update: (id, data) => apiRequest(`/teams/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   delete: (id) => apiRequest(`/teams/${id}`, { method: 'DELETE' }),
   addMember: (teamId, data) => apiRequest(`/teams/${teamId}/members`, { method: 'POST', body: JSON.stringify(data) }),
+  listMembers: (teamId) => apiRequest(`/teams/${teamId}/members`),
   removeMember: (teamId, userId) => apiRequest(`/teams/${teamId}/members/${userId}`, { method: 'DELETE' }),
 };
 

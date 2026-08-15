@@ -8,6 +8,7 @@ from backend.app.models.notification import NOTIFICATION_TYPES, Notification
 from backend.app.repositories.support_repositories import ActivityRepository, CommentRepository, NotificationRepository
 from backend.app.repositories.task_repository import TaskRepository
 from backend.app.services.rbac_service import RBACService
+from backend.app.services.realtime_service import RealtimeService
 from backend.app.utils.uuid_helpers import parse_uuid
 
 
@@ -21,6 +22,8 @@ class NotificationService:
             raise ValueError("Invalid notification recipient")
         if event_type not in NOTIFICATION_TYPES:
             raise ValueError("Invalid notification type")
+        if self.repo.exists(recipient_id, event_type, entity_type, entity_id):
+            return None
         notification = Notification(
             user_id=recipient_id,
             event_type=event_type,
@@ -31,6 +34,7 @@ class NotificationService:
             metadata_json=metadata or {},
         )
         self.repo.create(notification)
+        RealtimeService.notify_notification(str(recipient_id), notification.to_dict())
         return notification
 
     def notify_task_assigned(self, task, assignee_id: str, actor_id: str | None = None) -> None:
@@ -67,6 +71,15 @@ class NotificationService:
     def notify_team_added(self, team, user_id: str, actor_id: str) -> None:
         if str(user_id) != str(actor_id):
             self.create(user_id, "TEAM_ADDED", "You were added to a team", team.name, "team", str(team.id))
+
+    def notify_team_member_removed(self, user_id: str, actor_id: str, team) -> None:
+        if str(user_id) != str(actor_id): self.create(user_id, "TEAM_MEMBER_REMOVED", "You were removed from a team", team.name, "team", str(team.id))
+
+    def notify_organization_role_changed(self, user_id, actor_id, role, organization_id) -> None:
+        if str(user_id) != str(actor_id): self.create(user_id, "ORGANIZATION_ROLE_CHANGED", "Your organization role changed", f"Your role is now {role}", "organization", str(organization_id))
+
+    def notify_organization_member_removed(self, user_id, actor_id, organization_id) -> None:
+        if str(user_id) != str(actor_id): self.create(user_id, "ORGANIZATION_MEMBER_REMOVED", "You were removed from an organization", None, "organization", str(organization_id))
 
     def list_notifications(self, user_id: str, query_params: dict[str, Any]) -> dict[str, Any]:
         page = max(int(query_params.get("page") or 1), 1)
@@ -148,7 +161,10 @@ class CommentService:
             entity_id=str(comment.id),
         ))
         db.session.commit()
-        return comment.to_dict()
+        result = comment.to_dict()
+        RealtimeService.notify_comment(str(task.id), result)
+        RealtimeService.publish(f"project:{project.id}", "comment.created", result)
+        return result
 
     def list_comments(self, user_id: str, task_id: str) -> list[dict[str, Any]]:
         task = self.task_repo.get_by_id(task_id)
@@ -176,7 +192,9 @@ class CommentService:
         comment.mentions = self._extract_mentions(content, project.organization_id)
         self.repo.update(comment)
         db.session.commit()
-        return comment.to_dict()
+        result = comment.to_dict()
+        RealtimeService.publish(f"task:{task.id}", "comment.updated", result)
+        return result
 
     def delete_comment(self, user_id: str, comment_id: str) -> dict[str, Any]:
         comment = self.repo.get_by_id(comment_id)
@@ -192,4 +210,5 @@ class CommentService:
 
         self.repo.delete(comment)
         db.session.commit()
+        RealtimeService.publish(f"task:{task.id}", "comment.deleted", {"comment_id": str(comment.id), "task_id": str(task.id)})
         return {"message": "Comment deleted"}

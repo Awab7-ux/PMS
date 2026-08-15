@@ -36,7 +36,7 @@ services:
       - uploads_data:/app/uploads
     command: >
       sh -c "flask db upgrade &&
-             gunicorn --bind 0.0.0.0:5000 --workers 2 backend.wsgi:app"
+             gunicorn --bind 0.0.0.0:5000 --worker-class gthread --threads 100 --workers 1 backend.wsgi:app"
 
   frontend:
     build:

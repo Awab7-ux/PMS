@@ -8,6 +8,7 @@ from backend.app.repositories.support_repositories import ActivityRepository, Co
 from backend.app.repositories.task_repository import TaskRepository
 from backend.app.services.support_services import NotificationService
 from backend.app.services.rbac_service import RBACService
+from backend.app.services.realtime_service import RealtimeService
 from backend.app.utils.uuid_helpers import parse_uuid
 
 
@@ -103,7 +104,10 @@ class TaskService:
 
         self._log(project.organization_id, user_id, "task.created", "task", task.id, {"title": title})
         db.session.commit()
-        return task.to_dict()
+        result = task.to_dict()
+        RealtimeService.organization(str(project.organization_id), "task.created", result)
+        RealtimeService.publish(f"project:{task.project_id}", "task.created", result)
+        return result
 
     def list_tasks(self, user_id: str, query_params: dict[str, Any]) -> dict[str, Any]:
         project_id = query_params.get("project_id")
@@ -193,7 +197,12 @@ class TaskService:
 
         self._log(project.organization_id, user_id, "task.updated", "task", task.id)
         db.session.commit()
-        return task.to_dict()
+        result = task.to_dict()
+        event = "task.status_changed" if old_status != task.status else "task.updated"
+        RealtimeService.organization(str(project.organization_id), event, result)
+        RealtimeService.publish(f"project:{task.project_id}", event, result)
+        RealtimeService.publish(f"task:{task.id}", event, result)
+        return result
 
     def delete_task(self, user_id: str, task_id: str) -> dict[str, Any]:
         task = self.repo.get_by_id(task_id)
@@ -204,6 +213,9 @@ class TaskService:
         self.repo.delete(task)
         self._log(project.organization_id, user_id, "task.deleted", "task", task.id)
         db.session.commit()
+        payload = {"task_id": str(task.id), "project_id": str(task.project_id), "organization_id": str(project.organization_id)}
+        RealtimeService.organization(str(project.organization_id), "task.deleted", payload)
+        RealtimeService.publish(f"project:{task.project_id}", "task.deleted", payload)
         return {"message": "Task deleted"}
 
     def assign_task(self, user_id: str, task_id: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -315,7 +327,11 @@ class TaskService:
         self._log(project.organization_id, user_id, "task.moved", "task", task.id, {"status": new_status, "kanban_order": task.kanban_order})
 
         db.session.commit()
-        return task.to_dict()
+        result = task.to_dict()
+        RealtimeService.organization(str(project.organization_id), "task.status_changed", result)
+        RealtimeService.publish(f"project:{task.project_id}", "task.status_changed", result)
+        RealtimeService.publish(f"task:{task.id}", "task.status_changed", result)
+        return result
 
     def bulk_reorder(self, user_id: str, project_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         self.rbac.require_project_access(user_id, project_id)

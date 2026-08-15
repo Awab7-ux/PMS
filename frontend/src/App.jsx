@@ -22,6 +22,8 @@ const ActivityPage = lazy(() => import('./pages/ActivityPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const UsersPage = lazy(() => import('./pages/UsersPage'));
 const SearchPage = lazy(() => import('./pages/SearchPage'));
+const InvitationsPage = lazy(() => import('./pages/InvitationsPage'));
+const AcceptInvitationPage = lazy(() => import('./pages/AcceptInvitationPage'));
 
 export default function App() {
   return (
@@ -33,6 +35,7 @@ export default function App() {
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
+          <Route path="/invitations/accept/:token" element={<ProtectedRoute><AcceptInvitationPage /></ProtectedRoute>} />
 
           <Route element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
             <Route index element={<Navigate to="/dashboard" replace />} />
@@ -50,6 +53,7 @@ export default function App() {
             <Route path="activity" element={<ActivityPage />} />
             <Route path="settings" element={<SettingsPage />} />
             <Route path="users" element={<UsersPage />} />
+            <Route path="invitations" element={<InvitationsPage />} />
             <Route path="search" element={<SearchPage />} />
           </Route>
 

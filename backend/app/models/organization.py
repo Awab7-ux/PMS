@@ -27,6 +27,7 @@ class Organization(db.Model):
     teams: Mapped[list["Team"]] = relationship(back_populates="organization", cascade="all, delete-orphan")
     roles: Mapped[list["Role"]] = relationship(back_populates="organization", cascade="all, delete-orphan")
     projects: Mapped[list["Project"]] = relationship(back_populates="organization", cascade="all, delete-orphan")
+    invitations: Mapped[list["OrganizationInvitation"]] = relationship(back_populates="organization", cascade="all, delete-orphan")
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -127,4 +128,35 @@ class OrganizationMembership(db.Model):
             "is_owner": self.is_owner,
             "joined_at": self.joined_at.isoformat() if self.joined_at else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class OrganizationInvitation(db.Model):
+    __tablename__ = "organization_invitations"
+    __table_args__ = (UniqueConstraint("organization_id", "email", "status", name="uq_organization_invitation_active"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(postgresql.UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[uuid.UUID] = mapped_column(postgresql.UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False, index=True)
+    inviter_id: Mapped[uuid.UUID] = mapped_column(postgresql.UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    email: Mapped[str] = mapped_column(String(255), nullable=False)
+    role_id: Mapped[uuid.UUID] = mapped_column(postgresql.UUID(as_uuid=True), ForeignKey("roles.id"), nullable=False)
+    token: Mapped[str] = mapped_column(String(128), nullable=False, unique=True, index=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    organization: Mapped[Organization] = relationship(back_populates="invitations")
+    inviter: Mapped["User"] = relationship(foreign_keys=[inviter_id])
+    role: Mapped[Role] = relationship(foreign_keys=[role_id])
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": str(self.id), "organization_id": str(self.organization_id), "email": self.email,
+            "role": self.role.name if self.role else None,
+            "inviter_name": self.inviter.full_name if self.inviter else None,
+            "status": self.status,
+            "expires_at": self.expires_at.isoformat() if self.expires_at else None,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "accepted_at": self.accepted_at.isoformat() if self.accepted_at else None,
         }

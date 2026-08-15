@@ -1,4 +1,6 @@
-"""Real-time event abstraction for future WebSocket integration."""
+"""Single publication gateway for REST services and Socket.IO clients."""
+
+from backend.app import socketio
 
 
 class RealtimeService:
@@ -13,6 +15,8 @@ class RealtimeService:
                 callback(payload)
             except Exception:
                 pass
+        # The room name is created only by validated socket subscriptions.
+        socketio.emit(event, data, to=channel)
 
     @classmethod
     def subscribe(cls, channel: str, callback) -> None:
@@ -29,3 +33,7 @@ class RealtimeService:
     @classmethod
     def notify_notification(cls, user_id: str, notification_data: dict) -> None:
         cls.publish(f"user:{user_id}", "notification.new", notification_data)
+
+    @classmethod
+    def organization(cls, organization_id: str, event: str, data: dict) -> None:
+        cls.publish(f"organization:{organization_id}", event, data)

@@ -1,7 +1,7 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useCallback, useEffect, useState } from 'react';
-import { notificationApi } from '../services/api';
+import { notificationApi, orgApi } from '../services/api';
 import './MainLayout.css';
 
 const NAV = [
@@ -16,6 +16,8 @@ const NAV = [
   { to: '/users', label: 'Users', icon: '👤' },
   { to: '/settings', label: 'Settings', icon: '⚙️' },
 ];
+
+NAV.splice(NAV.length - 1, 0, { to: '/invitations', label: 'Invitations', icon: '✉', management: true });
 
 const notificationDestination = (notification) => {
   if (notification.entity_type === 'task' && notification.entity_id) return `/tasks/${notification.entity_id}`;
@@ -34,7 +36,7 @@ const relativeTime = (value) => {
 };
 
 export default function MainLayout() {
-  const { user, logout, organization } = useAuth();
+  const { user, logout, organization, orgId, connectionStatus } = useAuth();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem('sidebar_collapsed') === 'true');
@@ -44,6 +46,7 @@ export default function MainLayout() {
   const [notificationLoading, setNotificationLoading] = useState(false);
   const [notificationError, setNotificationError] = useState('');
   const [searchQ, setSearchQ] = useState('');
+  const [canManageOrganization, setCanManageOrganization] = useState(false);
 
   const loadNotifications = useCallback(async () => {
     setNotificationLoading(true); setNotificationError('');
@@ -53,6 +56,7 @@ export default function MainLayout() {
   }, []);
 
   useEffect(() => { loadNotifications(); const timer = setInterval(loadNotifications, 60000); return () => clearInterval(timer); }, [loadNotifications]);
+  useEffect(() => { if (!orgId || !user?.id) return; orgApi.members(orgId).then(result => { const membership = (result.data || []).find(item => item.user_id === user.id); setCanManageOrganization(['Organization Owner', 'Project Manager'].includes(membership?.role)); }).catch(() => setCanManageOrganization(false)); }, [orgId, user?.id]);
   const openNotification = () => { setNotificationOpen(open => !open); if (!notificationOpen) loadNotifications(); };
   const handleNotificationClick = async (notification) => {
     try { if (!notification.is_read) await notificationApi.markRead(notification.id); const destination = notificationDestination(notification); setNotificationOpen(false); if (destination) navigate(destination); await loadNotifications(); }
@@ -88,7 +92,7 @@ export default function MainLayout() {
           <div className="sidebar-org">{organization.name}</div>
         )}
         <nav className="sidebar-nav">
-          {NAV.map(item => (
+          {NAV.filter(item => !item.management || canManageOrganization).map(item => (
             <NavLink key={item.to} to={item.to} title={sidebarCollapsed ? item.label : undefined} className={({ isActive }) => isActive ? 'active' : ''} onClick={() => setSidebarOpen(false)}>
               <span className="nav-icon" aria-hidden="true">{item.icon}</span> <span className="sidebar-label">{item.label}</span>
               {item.to === '/notifications' && unread > 0 && (
@@ -115,7 +119,7 @@ export default function MainLayout() {
           <form onSubmit={handleSearch} className="header-search">
             <input className="input" placeholder="Search..." value={searchQ} onChange={e => setSearchQ(e.target.value)} aria-label="Global search" />
           </form>
-          <div className="header-right">
+          <div className="header-right"><span className={`connection-status ${connectionStatus}`} title={`Realtime ${connectionStatus}`}>{connectionStatus === 'connected' ? '● Live' : connectionStatus === 'reconnecting' ? '◌ Reconnecting' : '○ Offline'}</span>
             <div className="notification-menu"><button type="button" className="header-notif" onClick={openNotification} aria-label="Notifications" aria-expanded={notificationOpen}>🔔 {unread > 0 && <span className="nav-badge">{unread > 99 ? '99+' : unread}</span>}</button>{notificationOpen && <div className="notification-panel" role="dialog" aria-label="Recent notifications"><div className="notification-panel-header"><strong>Notifications</strong>{unread > 0 && <button type="button" className="btn btn-secondary btn-sm" onClick={markAllRead}>Mark all read</button>}</div>{notificationLoading ? <div className="notification-panel-state">Loading notifications…</div> : notificationError ? <div className="notification-panel-state"><span>{notificationError}</span><button type="button" className="btn btn-secondary btn-sm" onClick={loadNotifications}>Retry</button></div> : notifications.length === 0 ? <div className="notification-panel-state">You’re all caught up.</div> : <div className="notification-list">{notifications.map(notification => <button type="button" key={notification.id} className={`notification-item ${notification.is_read ? '' : 'unread'}`} onClick={() => handleNotificationClick(notification)}><span className="notification-icon">{notification.event_type.includes('TASK') ? '✓' : notification.event_type.includes('TEAM') ? '👥' : '📁'}</span><span><strong>{notification.title}</strong><small>{notification.message}</small><em>{relativeTime(notification.created_at)}</em></span></button>)}</div>}<NavLink to="/notifications" className="notification-panel-footer" onClick={() => setNotificationOpen(false)}>View all notifications</NavLink></div>}</div>
             <span className="user-name">{user?.full_name}</span>
             <button type="button" className="btn btn-secondary btn-sm" onClick={handleLogout}>Logout</button>

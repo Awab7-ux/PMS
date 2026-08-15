@@ -4,6 +4,7 @@ from flask_cors import CORS
 from flask_jwt_extended import JWTManager
 from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
+from flask_socketio import SocketIO
 
 from backend.app.config import get_config
 from backend.app.extensions import init_extensions
@@ -12,6 +13,7 @@ from backend.app.extensions import init_extensions
 db = SQLAlchemy()
 migrate = Migrate()
 jwt = JWTManager()
+socketio = SocketIO()
 
 
 def create_app(config_name: str | None = None) -> Flask:
@@ -19,7 +21,10 @@ def create_app(config_name: str | None = None) -> Flask:
     app = Flask(__name__)
     app.config.from_object(get_config(config_name))
 
-    init_extensions(app, db=db, migrate=migrate, jwt=jwt)
+    init_extensions(app, db=db, migrate=migrate, jwt=jwt, socketio=socketio)
+
+    from backend.app.realtime.socket_handlers import register_socket_handlers
+    register_socket_handlers(socketio)
 
     CORS(app, resources={r"/api/*": {"origins": app.config.get("CORS_ORIGINS", "*")}})
 

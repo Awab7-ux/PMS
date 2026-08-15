@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { authApi, userApi, orgApi, setTokens, clearTokens, getTokens } from '../services/api';
+import { connectRealtime, disconnectRealtime } from '../services/realtime';
 
 const AuthContext = createContext(null);
 
@@ -35,6 +36,7 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [organization, setOrganization] = useState(null);
+  const [connectionStatus, setConnectionStatus] = useState('offline');
 
   const loadUser = useCallback(async () => {
     const { access } = getTokens();
@@ -48,6 +50,7 @@ export function AuthProvider({ children }) {
       const org = await ensureOrganization(res.data);
       setOrganization(org);
       localStorage.setItem('org_id', org.id);
+      connectRealtime(access, setConnectionStatus);
     } catch {
       clearTokens();
       setUser(null);
@@ -74,6 +77,7 @@ export function AuthProvider({ children }) {
 
   const logout = async () => {
     try { await authApi.logout(); } catch { /* ignore */ }
+    disconnectRealtime();
     clearTokens();
     setUser(null);
     setOrganization(null);
@@ -83,7 +87,7 @@ export function AuthProvider({ children }) {
   const orgId = organization?.id || localStorage.getItem('org_id');
 
   return (
-    <AuthContext.Provider value={{ user, loading, organization, orgId, setOrganization, login, register, logout, reload: loadUser }}>
+    <AuthContext.Provider value={{ user, loading, organization, orgId, connectionStatus, setOrganization, login, register, logout, reload: loadUser }}>
       {children}
     </AuthContext.Provider>
   );

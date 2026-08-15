@@ -104,6 +104,9 @@ class NotificationRepository:
         db.session.flush()
         return notification
 
+    def exists(self, user_id, event_type, entity_type, entity_id) -> bool:
+        return db.session.execute(db.select(Notification.id).where(Notification.user_id == user_id, Notification.event_type == event_type, Notification.entity_type == entity_type, Notification.entity_id == entity_id, Notification.is_read.is_(False))).first() is not None
+
     def list_for_user(self, user_id: str | uuid.UUID, unread_only: bool = False, page: int = 1, per_page: int = 20) -> tuple[list[Notification], int]:
         try:
             parsed = uuid.UUID(str(user_id))
