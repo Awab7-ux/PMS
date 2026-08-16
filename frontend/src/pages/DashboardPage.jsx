@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { useAuth } from '../context/AuthContext';
 import { notificationApi, projectApi, reportApi } from '../services/api';
+import { joinRoom, leaveRoom, onRealtime } from '../services/realtime';
 import '../styles/dashboard.css';
 
 const COLORS = ['#2563eb', '#16a34a', '#f59e0b', '#dc2626', '#7c3aed'];
@@ -15,6 +16,7 @@ function Metric({ label, value, hint, tone = 'blue' }) {
 export default function DashboardPage() {
   const { orgId, user } = useAuth();
   const [stats, setStats] = useState(null); const [projects, setProjects] = useState([]); const [notifications, setNotifications] = useState([]); const [loading, setLoading] = useState(true); const [error, setError] = useState('');
+  const refreshTimer = useRef();
   const load = () => {
     if (!orgId) { setLoading(false); return; }
     setLoading(true); setError('');
@@ -24,6 +26,21 @@ export default function DashboardPage() {
       .finally(() => setLoading(false));
   };
   useEffect(() => { load(); }, [orgId]);
+  useEffect(() => {
+    if (!orgId) return undefined;
+    joinRoom('organization', orgId);
+    const refresh = payload => {
+      if (String(payload.organization_id) !== String(orgId)) return;
+      clearTimeout(refreshTimer.current);
+      refreshTimer.current = setTimeout(() => {
+        Promise.all([reportApi.analytics(orgId), projectApi.list({ organization_id: orgId, per_page: 5 })])
+          .then(([analytics, projectResult]) => { setStats(analytics.data); setProjects(projectResult.data || []); })
+          .catch(() => {});
+      }, 250);
+    };
+    const off = ['task.created', 'task.updated', 'task.status_changed', 'task.deleted', 'project.created', 'project.updated', 'project.deleted'].map(event => onRealtime(event, refresh));
+    return () => { clearTimeout(refreshTimer.current); leaveRoom('organization', orgId); off.forEach(stop => stop()); };
+  }, [orgId]);
   const statusData = useMemo(() => Object.entries(stats?.tasks_by_status || {}).map(([name, value]) => ({ name: cleanLabel(name), value })), [stats]);
   const priorityData = useMemo(() => Object.entries(stats?.tasks_by_priority || {}).map(([name, value]) => ({ name: cleanLabel(name), value })), [stats]);
   const highPriority = (stats?.tasks_by_priority?.HIGH || 0) + (stats?.tasks_by_priority?.CRITICAL || 0);

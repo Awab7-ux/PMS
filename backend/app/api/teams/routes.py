@@ -108,3 +108,17 @@ def remove_team_member(team_id, user_id):
     except ValueError as exc:
         return build_response(False, {}, str(exc), {}, 400)
     return build_response(True, result, "Team member removed successfully.", {}, 200)
+
+
+@bp.route("/<team_id>/members/<user_id>", methods=["PATCH"])
+@jwt_required()
+def update_team_member(team_id, user_id):
+    acting_user_id = get_jwt_identity()
+    payload = request.get_json(silent=True) or {}
+    try:
+        result = service.update_team_member(acting_user_id, team_id, user_id, payload)
+    except PermissionError as exc:
+        return build_response(False, {}, str(exc), {}, 403)
+    except ValueError as exc:
+        return build_response(False, {}, str(exc), {}, 400)
+    return build_response(True, result, "Team member updated successfully.", {}, 200)

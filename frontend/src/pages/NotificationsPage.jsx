@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react';
 import { notificationApi } from '../services/api';
+import { useAuth } from '../context/AuthContext';
+import { onRealtime } from '../services/realtime';
 
 export default function NotificationsPage() {
+  const { user } = useAuth();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -14,6 +17,10 @@ export default function NotificationsPage() {
   };
 
   useEffect(() => { load(); }, []);
+  useEffect(() => onRealtime('notification.new', notification => {
+    if (String(notification.user_id) !== String(user?.id)) return;
+    setItems(current => [notification, ...current.filter(item => item.id !== notification.id)]);
+  }), [user?.id]);
 
   const markRead = async (id) => {
     await notificationApi.markRead(id);

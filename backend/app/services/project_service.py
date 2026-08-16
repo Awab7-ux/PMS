@@ -7,6 +7,7 @@ from backend.app.repositories.organization_repository import OrganizationReposit
 from backend.app.repositories.project_repository import ProjectRepository
 from backend.app.repositories.user_repository import UserRepository
 from backend.app.services.support_services import NotificationService
+from backend.app.services.realtime_service import RealtimeService
 from backend.app.utils.uuid_helpers import parse_uuid
 
 
@@ -110,7 +111,9 @@ class ProjectService:
             self.project_repository.create_membership(creator_membership)
 
         db.session.commit()
-        return project.to_dict()
+        result = project.to_dict()
+        RealtimeService.organization(str(project.organization_id), "project.created", result)
+        return result
 
     def list_projects(self, user_id: str, query_params: dict[str, Any]) -> dict[str, Any]:
         page = max(int(query_params.get("page") or 1), 1)
@@ -204,7 +207,9 @@ class ProjectService:
 
         self.project_repository.update(project)
         db.session.commit()
-        return project.to_dict()
+        result = project.to_dict()
+        RealtimeService.organization(str(project.organization_id), "project.updated", result)
+        return result
 
     def delete_project(self, user_id: str, project_id: str) -> dict[str, Any]:
         project = self._get_project_with_access(user_id, project_id)
@@ -213,6 +218,7 @@ class ProjectService:
             raise PermissionError("Insufficient permissions")
         self.project_repository.delete(project)
         db.session.commit()
+        RealtimeService.organization(str(project.organization_id), "project.deleted", {"project_id": str(project.id), "organization_id": str(project.organization_id)})
         return {"message": "Project archived"}
 
     def list_members(self, user_id: str, project_id: str) -> list[dict[str, Any]]:

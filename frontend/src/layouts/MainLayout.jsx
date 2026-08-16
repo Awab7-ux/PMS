@@ -1,24 +1,69 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import 'bootstrap-icons/font/bootstrap-icons.css';
 import { useAuth } from '../context/AuthContext';
 import { useCallback, useEffect, useState } from 'react';
 import { notificationApi, orgApi } from '../services/api';
+import { onRealtime } from '../services/realtime';
 import './MainLayout.css';
 
+
 const NAV = [
-  { to: '/dashboard', label: 'Dashboard', icon: '📊' },
-  { to: '/projects', label: 'Projects', icon: '📁' },
-  { to: '/tasks', label: 'Tasks', icon: '✅' },
-  { to: '/teams', label: 'Teams', icon: '👥' },
-  { to: '/calendar', label: 'Calendar', icon: '📅' },
-  { to: '/reports', label: 'Reports', icon: '📈' },
-  { to: '/notifications', label: 'Notifications', icon: '🔔' },
-  { to: '/activity', label: 'Activity', icon: '📋' },
-  { to: '/users', label: 'Users', icon: '👤' },
-  { to: '/settings', label: 'Settings', icon: '⚙️' },
+  {
+    to: '/dashboard',
+    label: 'Dashboard',
+    icon: 'bi-house-door-fill',
+  },
+  {
+    to: '/projects',
+    label: 'Projects',
+    icon: 'bi-kanban-fill',
+  },
+  {
+    to: '/tasks',
+    label: 'Tasks',
+    icon: 'bi-check2-square',
+  },
+  {
+    to: '/teams',
+    label: 'Teams',
+    icon: 'bi-people-fill',
+  },
+  {
+    to: '/calendar',
+    label: 'Calendar',
+    icon: 'bi-calendar3',
+  },
+  {
+    to: '/reports',
+    label: 'Reports',
+    icon: 'bi-bar-chart-fill',
+  },
+  {
+    to: '/notifications',
+    label: 'Notifications',
+    icon: 'bi-bell-fill',
+  },
+  {
+    to: '/activity',
+    label: 'Activity',
+    icon: 'bi-activity',
+  },
+  {
+    to: '/users',
+    label: 'Users',
+    icon: 'bi-person-fill',
+  },
+  {
+    to: '/invitations',
+    label: 'Invitations',
+    icon: 'bi-envelope-fill',
+    management: true,
+  },
+  {
+    to: '/settings',
+    label: 'Settings',
+    icon: 'bi-gear-fill',
+  },
 ];
-
-NAV.splice(NAV.length - 1, 0, { to: '/invitations', label: 'Invitations', icon: '✉', management: true });
-
 const notificationDestination = (notification) => {
   if (notification.entity_type === 'task' && notification.entity_id) return `/tasks/${notification.entity_id}`;
   if (notification.entity_type === 'project' && notification.entity_id) return `/projects/${notification.entity_id}`;
@@ -56,6 +101,11 @@ export default function MainLayout() {
   }, []);
 
   useEffect(() => { loadNotifications(); const timer = setInterval(loadNotifications, 60000); return () => clearInterval(timer); }, [loadNotifications]);
+  useEffect(() => onRealtime('notification.new', notification => {
+    if (String(notification.user_id) !== String(user?.id)) return;
+    setNotifications(current => [notification, ...current.filter(item => item.id !== notification.id)].slice(0, 6));
+    if (!notification.is_read) setUnread(current => current + 1);
+  }), [user?.id]);
   useEffect(() => { if (!orgId || !user?.id) return; orgApi.members(orgId).then(result => { const membership = (result.data || []).find(item => item.user_id === user.id); setCanManageOrganization(['Organization Owner', 'Project Manager'].includes(membership?.role)); }).catch(() => setCanManageOrganization(false)); }, [orgId, user?.id]);
   const openNotification = () => { setNotificationOpen(open => !open); if (!notificationOpen) loadNotifications(); };
   const handleNotificationClick = async (notification) => {
@@ -92,15 +142,30 @@ export default function MainLayout() {
           <div className="sidebar-org">{organization.name}</div>
         )}
         <nav className="sidebar-nav">
-          {NAV.filter(item => !item.management || canManageOrganization).map(item => (
-            <NavLink key={item.to} to={item.to} title={sidebarCollapsed ? item.label : undefined} className={({ isActive }) => isActive ? 'active' : ''} onClick={() => setSidebarOpen(false)}>
-              <span className="nav-icon" aria-hidden="true">{item.icon}</span> <span className="sidebar-label">{item.label}</span>
-              {item.to === '/notifications' && unread > 0 && (
-                <span className="nav-badge">{unread}</span>
-              )}
-            </NavLink>
-          ))}
-        </nav>
+  {NAV
+    .filter(item => !item.management || canManageOrganization)
+    .map(item => (
+      <NavLink
+        key={item.to}
+        to={item.to}
+        title={sidebarCollapsed ? item.label : undefined}
+        className={({ isActive }) => isActive ? 'active' : ''}
+        onClick={() => setSidebarOpen(false)}
+      >
+        <span className="nav-icon" aria-hidden="true">
+          <i className={`bi ${item.icon}`}></i>
+        </span>
+
+        <span className="sidebar-label">
+          {item.label}
+        </span>
+
+        {item.to === '/notifications' && unread > 0 && (
+          <span className="nav-badge">{unread}</span>
+        )}
+      </NavLink>
+    ))}
+</nav>
         <div className="sidebar-footer">
           <div className="profile-card">
             <span className="avatar" aria-hidden="true">{(user?.full_name || user?.username || 'U').slice(0, 1).toUpperCase()}</span>

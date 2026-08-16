@@ -13,7 +13,15 @@ export default function TaskDetailPage() {
   const [editing, setEditing] = useState(false); const [form, setForm] = useState({}); const [saving, setSaving] = useState(false); const [newComment, setNewComment] = useState(''); const [newSubtask, setNewSubtask] = useState('');
   const load = useCallback(async () => { setLoading(true); setError(''); try { const [taskRes, commentsRes, usersRes] = await Promise.all([taskApi.get(id), commentApi.list(id), orgId ? userApi.list({ organization_id: orgId, per_page: 100 }) : Promise.resolve({ data: [] })]); setTask(taskRes.data); setComments(commentsRes.data || []); setUsers(usersRes.data || []); } catch (err) { setError(err.message || 'Unable to load this task right now.'); } finally { setLoading(false); } }, [id, orgId]);
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { joinRoom('task', id); const offComment = onRealtime('comment.created', comment => { setComments(current => current.some(item => item.id === comment.id) ? current : [...current, comment]); }); const offTask = onRealtime('task.updated', updated => { if (updated.id === id) setTask(current => ({ ...current, ...updated })); }); return () => { leaveRoom('task', id); offComment(); offTask(); }; }, [id]);
+  useEffect(() => {
+    joinRoom('task', id);
+    const upsertComment = comment => { if (String(comment.task_id) !== String(id)) return; setComments(current => current.some(item => item.id === comment.id) ? current.map(item => item.id === comment.id ? { ...item, ...comment } : item) : [...current, comment]); };
+    const removeComment = payload => { if (String(payload.task_id) === String(id)) setComments(current => current.filter(comment => comment.id !== payload.comment_id)); };
+    const updateTask = updated => { if (String(updated.id) === String(id)) setTask(current => ({ ...current, ...updated })); };
+    const removeTask = payload => { if (String(payload.task_id) === String(id)) navigate('/tasks'); };
+    const off = [onRealtime('comment.added', upsertComment), onRealtime('comment.updated', upsertComment), onRealtime('comment.deleted', removeComment), onRealtime('task.updated', updateTask), onRealtime('task.status_changed', updateTask), onRealtime('task.deleted', removeTask)];
+    return () => { leaveRoom('task', id); off.forEach(stop => stop()); };
+  }, [id, navigate]);
   const saveTask = async event => { event.preventDefault(); setSaving(true); try { await taskApi.update(id, { ...form, assignee_id: form.assignee_id || null, due_date: form.due_date || null }); setEditing(false); load(); } catch (err) { setError(err.message || 'Unable to save task changes.'); } finally { setSaving(false); } };
   const addComment = async event => { event.preventDefault(); if (!newComment.trim()) return; setSaving(true); try { await commentApi.create(id, { content: newComment.trim() }); setNewComment(''); load(); } catch (err) { setError(err.message || 'Unable to post comment.'); } finally { setSaving(false); } };
   const addSubtask = async event => { event.preventDefault(); if (!newSubtask.trim()) return; setSaving(true); try { await taskApi.createSubtask(id, { title: newSubtask.trim() }); setNewSubtask(''); load(); } catch (err) { setError(err.message || 'Unable to create subtask.'); } finally { setSaving(false); } };

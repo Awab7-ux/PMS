@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { projectApi } from '../services/api';
+import { joinRoom, leaveRoom, onRealtime } from '../services/realtime';
 
 export default function ProjectsPage() {
   const { orgId } = useAuth();
@@ -23,6 +24,15 @@ export default function ProjectsPage() {
   };
 
   useEffect(() => { load(); }, [orgId, search]);
+  useEffect(() => {
+    if (!orgId) return undefined;
+    joinRoom('organization', orgId);
+    const updateProject = project => { if (String(project.organization_id) !== String(orgId)) return; setProjects(current => current.some(item => item.id === project.id) ? current.map(item => item.id === project.id ? { ...item, ...project } : item) : current); };
+    const refreshProject = task => { if (String(task.organization_id) !== String(orgId)) return; setProjects(current => { if (!current.some(project => String(project.id) === String(task.project_id))) return current; projectApi.get(task.project_id).then(response => setProjects(rows => rows.map(project => String(project.id) === String(task.project_id) ? response.data : project))).catch(() => {}); return current; }); };
+    const removeProject = payload => { if (String(payload.organization_id) === String(orgId)) setProjects(current => current.filter(project => String(project.id) !== String(payload.project_id))); };
+    const off = [onRealtime('project.created', updateProject), onRealtime('project.updated', updateProject), onRealtime('project.deleted', removeProject), ...['task.created', 'task.updated', 'task.status_changed', 'task.deleted'].map(event => onRealtime(event, refreshProject))];
+    return () => { leaveRoom('organization', orgId); off.forEach(stop => stop()); };
+  }, [orgId]);
 
   const handleCreate = async (e) => {
     e.preventDefault();

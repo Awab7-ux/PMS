@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { authApi, userApi, orgApi, setTokens, clearTokens, getTokens } from '../services/api';
-import { connectRealtime, disconnectRealtime } from '../services/realtime';
+import { connectRealtime, disconnectRealtime, joinRoom } from '../services/realtime';
 
 const AuthContext = createContext(null);
 
@@ -51,6 +51,7 @@ export function AuthProvider({ children }) {
       setOrganization(org);
       localStorage.setItem('org_id', org.id);
       connectRealtime(access, setConnectionStatus);
+      joinRoom('user', res.data.id);
     } catch {
       clearTokens();
       setUser(null);

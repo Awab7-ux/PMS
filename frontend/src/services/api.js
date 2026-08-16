@@ -140,6 +140,7 @@ export const teamApi = {
   delete: (id) => apiRequest(`/teams/${id}`, { method: 'DELETE' }),
   addMember: (teamId, data) => apiRequest(`/teams/${teamId}/members`, { method: 'POST', body: JSON.stringify(data) }),
   listMembers: (teamId) => apiRequest(`/teams/${teamId}/members`),
+  updateMember: (teamId, userId, data) => apiRequest(`/teams/${teamId}/members/${userId}`, { method: 'PATCH', body: JSON.stringify(data) }),
   removeMember: (teamId, userId) => apiRequest(`/teams/${teamId}/members/${userId}`, { method: 'DELETE' }),
 };
 

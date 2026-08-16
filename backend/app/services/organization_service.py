@@ -12,6 +12,7 @@ from backend.app.models.user import User
 from backend.app.repositories.organization_repository import OrganizationRepository, TeamRepository
 from backend.app.repositories.user_repository import UserRepository
 from backend.app.services.support_services import NotificationService
+from backend.app.services.realtime_service import RealtimeService
 from backend.app.repositories.support_repositories import ActivityRepository
 
 
@@ -295,7 +296,9 @@ class OrganizationService:
         self.team_repository.create(team)
         self._log(organization.id, user_id, "team_created", "team", team.id)
         db.session.commit()
-        return team.to_dict()
+        result = team.to_dict()
+        RealtimeService.organization(str(organization.id), "team.created", result)
+        return result
 
     def list_teams(self, user_id: str) -> list[dict[str, Any]]:
         organizations = self.organization_repository.list_for_user(user_id)
@@ -331,7 +334,10 @@ class OrganizationService:
         self.team_repository.update(team)
         self._log(team.organization_id, user_id, "team_updated", "team", team.id)
         db.session.commit()
-        return team.to_dict()
+        result = team.to_dict()
+        RealtimeService.organization(str(team.organization_id), "team.updated", result)
+        RealtimeService.publish(f"team:{team.id}", "team.updated", result)
+        return result
 
     def delete_team(self, user_id: str, team_id: str) -> dict[str, Any]:
         team = self.team_repository.get_by_id(team_id)
@@ -343,6 +349,10 @@ class OrganizationService:
         if membership.role.name not in {"Organization Owner", "Project Manager"}:
             raise PermissionError("Insufficient permissions")
         self.team_repository.delete(team)
+        db.session.commit()
+        payload = {"team_id": str(team.id), "organization_id": str(team.organization_id)}
+        RealtimeService.organization(str(team.organization_id), "team.deleted", payload)
+        RealtimeService.publish(f"team:{team.id}", "team.deleted", payload)
         return {"message": "Team archived"}
 
     def add_team_member(self, acting_user_id: str, team_id: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -372,7 +382,10 @@ class OrganizationService:
         self.notifications.notify_team_added(team, str(target_user.id), acting_user_id)
         self._log(team.organization_id, acting_user_id, "member_added_to_team", "team", team.id, {"user_id": str(target_user.id)})
         db.session.commit()
-        return membership.to_dict()
+        result = membership.to_dict(); result["user"] = target_user.to_dict(); result["organization_id"] = str(team.organization_id)
+        RealtimeService.organization(str(team.organization_id), "team.member_added", result)
+        RealtimeService.publish(f"team:{team.id}", "team.member_added", result)
+        return result
 
     def remove_team_member(self, acting_user_id: str, team_id: str, user_id: str) -> dict[str, Any]:
         team = self.team_repository.get_by_id(team_id)
@@ -390,6 +403,9 @@ class OrganizationService:
         self.notifications.notify_team_member_removed(user_id, acting_user_id, team)
         self._log(team.organization_id, acting_user_id, "member_removed_from_team", "team", team.id, {"user_id": str(user_id)})
         db.session.commit()
+        payload = {"team_id": str(team.id), "user_id": str(user_id), "organization_id": str(team.organization_id)}
+        RealtimeService.organization(str(team.organization_id), "team.member_removed", payload)
+        RealtimeService.publish(f"team:{team.id}", "team.member_removed", payload)
         return {"message": "Member removed"}
 
     def create_invitation(self, acting_user_id: str, organization_id: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -489,4 +505,9 @@ class OrganizationService:
             membership.role_in_team = payload["role_in_team"]
         self.team_repository.update_membership(membership)
         db.session.commit()
-        return membership.to_dict()
+        result = membership.to_dict()
+        if membership.user: result["user"] = membership.user.to_dict()
+        result["organization_id"] = str(team.organization_id)
+        RealtimeService.organization(str(team.organization_id), "team.member_updated", result)
+        RealtimeService.publish(f"team:{team.id}", "team.member_updated", result)
+        return result

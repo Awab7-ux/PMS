@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { calendarApi, eventApi, projectApi, teamApi } from '../services/api';
+import { joinRoom, leaveRoom, onRealtime } from '../services/realtime';
 import '../styles/calendar.css';
 
 const initialForm = { title: '', description: '', start_at: '', end_at: '', all_day: false, location: '', project_id: '', team_id: '' };
@@ -19,6 +20,15 @@ export default function CalendarPage() {
   const load = useCallback(async () => { if (!orgId) return; setLoading(true); setError(''); try { const response = await calendarApi.feed({ organization_id: orgId, start: range.start, end: range.end, ...Object.fromEntries(Object.entries(filters).filter(([, value]) => value)) }); setItems(response.data?.events || []); } catch (err) { setError(err.message || 'Unable to load calendar'); } finally { setLoading(false); } }, [orgId, range.start, range.end, filters]);
   useEffect(() => { load(); }, [load]);
   useEffect(() => { if (!orgId) return; Promise.all([projectApi.list({ organization_id: orgId, per_page: 100 }), teamApi.list()]).then(([p, t]) => { setProjects(p.data || []); setTeams((t.data || []).filter(team => team.organization_id === orgId)); }).catch(() => {}); }, [orgId]);
+  useEffect(() => {
+    if (!orgId) return undefined;
+    joinRoom('organization', orgId);
+    const normalize = event => ({ ...event, type: 'event', date: event.start_at?.slice(0, 10) });
+    const upsert = event => { if (String(event.organization_id) !== String(orgId)) return; const next = normalize(event); setItems(current => [next, ...current.filter(item => !(item.type === 'event' && item.id === next.id))]); };
+    const removeRealtimeEvent = payload => { if (String(payload.organization_id) === String(orgId)) setItems(current => current.filter(item => !(item.type === 'event' && item.id === payload.event_id))); };
+    const off = [onRealtime('calendar_event.created', upsert), onRealtime('calendar_event.updated', upsert), onRealtime('calendar_event.deleted', removeRealtimeEvent)];
+    return () => { leaveRoom('organization', orgId); off.forEach(stop => stop()); };
+  }, [orgId]);
   const shown = useMemo(() => items.filter(item => kind === 'all' || item.type === kind), [items, kind]);
   const days = useMemo(() => { const first = new Date(cursor.getFullYear(), cursor.getMonth(), 1); const start = new Date(first); start.setDate(1 - first.getDay()); return Array.from({ length: 42 }, (_, index) => { const date = new Date(start); date.setDate(start.getDate() + index); const key = date.toISOString().slice(0, 10); return { date, key, items: shown.filter(item => item.date === key) }; }); }, [cursor, shown]);
   const agenda = useMemo(() => { const now = new Date(); now.setHours(0, 0, 0, 0); const nextWeek = new Date(now); nextWeek.setDate(now.getDate() + 7); return items.filter(item => new Date(item.date + 'T00:00:00') <= nextWeek).sort((a, b) => a.date.localeCompare(b.date)); }, [items]);

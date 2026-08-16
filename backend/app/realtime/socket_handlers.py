@@ -25,6 +25,10 @@ def register_socket_handlers(socketio):
         if room_type == "organization":
             rbac.require_org_membership(user_id, resource_id)
             return
+        if room_type == "user":
+            if str(resource_id) != str(user_id):
+                raise PermissionError("Access denied")
+            return
         if room_type == "project":
             rbac.require_project_access(user_id, resource_id)
             return

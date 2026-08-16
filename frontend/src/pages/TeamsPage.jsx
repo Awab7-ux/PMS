@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { teamApi, orgApi } from '../services/api';
+import { joinRoom, leaveRoom, onRealtime } from '../services/realtime';
 
 export default function TeamsPage() {
   const { orgId, user } = useAuth();
@@ -22,6 +23,15 @@ export default function TeamsPage() {
   };
 
   useEffect(() => { load(); }, []);
+  useEffect(() => {
+    if (!orgId) return undefined;
+    joinRoom('organization', orgId);
+    const upsert = team => { if (String(team.organization_id) !== String(orgId)) return; setTeams(current => current.some(item => item.id === team.id) ? current.map(item => item.id === team.id ? { ...item, ...team } : item) : [team, ...current]); };
+    const remove = payload => { if (String(payload.organization_id) === String(orgId)) setTeams(current => current.filter(team => String(team.id) !== String(payload.team_id))); };
+    const adjustMemberCount = (payload, delta) => { if (String(payload.organization_id) !== String(orgId)) return; setTeams(current => current.map(team => String(team.id) === String(payload.team_id) ? { ...team, member_count: Math.max(0, Number(team.member_count || 0) + delta) } : team)); };
+    const off = [onRealtime('team.created', upsert), onRealtime('team.updated', upsert), onRealtime('team.deleted', remove), onRealtime('team.member_added', event => adjustMemberCount(event, 1)), onRealtime('team.member_removed', event => adjustMemberCount(event, -1))];
+    return () => { leaveRoom('organization', orgId); off.forEach(stop => stop()); };
+  }, [orgId]);
   const canManage = ['Organization Owner', 'Project Manager'].includes(members.find(m => m.user_id === user?.id)?.role);
 
   const handleCreate = async (e) => {

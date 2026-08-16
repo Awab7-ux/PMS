@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { teamApi, orgApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { joinRoom, leaveRoom, onRealtime } from '../services/realtime';
 
 export default function TeamDetailPage() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const { orgId, user: currentUser } = useAuth();
   const [orgMembers, setOrgMembers] = useState([]);
   const [team, setTeam] = useState(null);
@@ -29,6 +31,16 @@ export default function TeamDetailPage() {
   };
 
   useEffect(() => { load(); }, [id, orgId]);
+  useEffect(() => {
+    if (!id) return undefined;
+    joinRoom('team', id);
+    const upsertMember = member => { if (String(member.team_id) !== String(id)) return; setMembers(current => current.some(item => String(item.user_id || item.id) === String(member.user_id)) ? current.map(item => String(item.user_id || item.id) === String(member.user_id) ? { ...item, ...member } : item) : [...current, member]); };
+    const removeMember = payload => { if (String(payload.team_id) === String(id)) setMembers(current => current.filter(member => String(member.user_id || member.id) !== String(payload.user_id))); };
+    const updateTeam = updated => { if (String(updated.id) === String(id)) setTeam(current => ({ ...current, ...updated })); };
+    const removeTeam = payload => { if (String(payload.team_id) === String(id)) navigate('/teams', { replace: true }); };
+    const off = [onRealtime('team.updated', updateTeam), onRealtime('team.deleted', removeTeam), onRealtime('team.member_added', upsertMember), onRealtime('team.member_updated', upsertMember), onRealtime('team.member_removed', removeMember)];
+    return () => { leaveRoom('team', id); off.forEach(stop => stop()); };
+  }, [id, navigate]);
 
   const handleAddMember = async (e) => {
     e.preventDefault();
@@ -78,7 +90,7 @@ export default function TeamDetailPage() {
                 <tr key={m.user_id || m.id}>
                   <td>{m.full_name || m.user?.full_name}</td>
                   <td>{m.email || m.user?.email}</td>
-                  <td>{m.role || 'Member'}</td>
+                  <td>{m.role_in_team || m.role || 'Member'}</td>
                   <td>{canManage && <button className="btn btn-danger btn-sm" onClick={() => handleRemove(m.user_id || m.id)}>Remove</button>}</td>
                 </tr>
               ))}

@@ -144,6 +144,56 @@ def test_create_team_and_add_member(client):
     assert add_team_member_response.status_code == 201
 
 
+def test_team_member_picker_only_returns_same_organization_users(client):
+    """The Team Detail picker consumes the organization-members endpoint."""
+    owner_token = register_and_login(client, "picker-owner@example.com", "pickerowner", "Picker Owner")
+    org = client.post(
+        "/api/v1/organizations",
+        json={"name": "Picker Org", "slug": "picker-org"},
+        headers={"Authorization": f"Bearer {owner_token}"},
+    ).get_json()["data"]
+    same_org_token = register_and_login(client, "picker-member@example.com", "pickermember", "Picker Member")
+    other_org_token = register_and_login(client, "picker-other@example.com", "pickerother", "Picker Other")
+
+    assert client.post(
+        f"/api/v1/organizations/{org['id']}/members",
+        json={"user_id": "picker-member@example.com", "role": "Team Member"},
+        headers={"Authorization": f"Bearer {owner_token}"},
+    ).status_code == 201
+
+    members_response = client.get(
+        f"/api/v1/organizations/{org['id']}/members",
+        headers={"Authorization": f"Bearer {owner_token}"},
+    )
+    assert members_response.status_code == 200
+    member_emails = {member["user"]["email"] for member in members_response.get_json()["data"]}
+    assert "picker-owner@example.com" in member_emails
+    assert "picker-member@example.com" in member_emails
+    assert "picker-other@example.com" not in member_emails
+
+    team = client.post(
+        "/api/v1/teams",
+        json={"organization_id": org["id"], "name": "Picker Team"},
+        headers={"Authorization": f"Bearer {owner_token}"},
+    ).get_json()["data"]
+    added = client.post(
+        f"/api/v1/teams/{team['id']}/members",
+        json={"user_id": "picker-member@example.com"},
+        headers={"Authorization": f"Bearer {owner_token}"},
+    )
+    assert added.status_code == 201
+    assert added.get_json()["data"]["user_id"]
+
+    # A user from another default workspace remains isolated and cannot be added.
+    other_id = client.get("/api/v1/users/me", headers={"Authorization": f"Bearer {other_org_token}"}).get_json()["data"]["id"]
+    blocked = client.post(
+        f"/api/v1/teams/{team['id']}/members",
+        json={"user_id": other_id},
+        headers={"Authorization": f"Bearer {owner_token}"},
+    )
+    assert blocked.status_code == 400
+
+
 def test_cross_organization_team_access_prevention(client):
     owner_a_token = register_and_login(client, "ownera@example.com", "ownera", "Owner A")
     org_a_response = client.post(
