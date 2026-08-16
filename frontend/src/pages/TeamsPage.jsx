@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { teamApi, orgApi } from '../services/api';
 import { joinRoom, leaveRoom, onRealtime } from '../services/realtime';
+import { PageHeader, Card, Modal, LoadingState, EmptyState, Alert, Badge, Input, Textarea, FormGroup, FormSection } from '../components';
 
 export default function TeamsPage() {
   const { orgId, user } = useAuth();
@@ -12,7 +13,6 @@ export default function TeamsPage() {
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ name: '', description: '' });
   const [error, setError] = useState('');
-  const [saving, setSaving] = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -37,7 +37,6 @@ export default function TeamsPage() {
   const handleCreate = async (e) => {
     e.preventDefault();
     setError('');
-    setSaving(true);
     try {
       await teamApi.create({ ...form, organization_id: orgId });
       setShowModal(false);
@@ -45,7 +44,7 @@ export default function TeamsPage() {
       load();
     } catch (err) {
       setError(err.message);
-    } finally { setSaving(false); }
+    }
   };
 
   const handleDelete = async (id) => {
@@ -54,55 +53,103 @@ export default function TeamsPage() {
     load();
   };
 
-  if (loading) return <div className="loader">Loading teams...</div>;
+  if (loading) return <LoadingState message="Loading teams..." />;
 
   return (
     <div>
-      <div className="page-header">
-        <div><h1>Teams</h1><p>Bring the right people together around shared work.</p></div>
-        {canManage && <button className="btn btn-primary" onClick={() => setShowModal(true)}>+ New Team</button>}
-      </div>
+      <PageHeader
+        title="Teams"
+        description="Bring the right people together around shared work."
+        icon="👥"
+        action={
+          canManage && (
+            <button className="btn btn-primary" onClick={() => setShowModal(true)}>
+              + New Team
+            </button>
+          )
+        }
+      />
 
-      {error && <div className="alert alert-error">{error}</div>}
+      {error && <Alert type="error" title="Error" message={error} onClose={() => setError('')} />}
 
       {teams.length === 0 ? (
-        <div className="card empty-state">No teams yet. Create your first team.</div>
+        <EmptyState
+          icon="👥"
+          title="No teams yet"
+          message="Create your first team to collaborate with colleagues."
+          action={
+            canManage && (
+              <button className="btn btn-primary" onClick={() => setShowModal(true)}>
+                Create First Team
+              </button>
+            )
+          }
+        />
       ) : (
-        <div className="grid-3">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
           {teams.map(t => (
-            <div key={t.id} className="card">
-              <h3><Link to={`/teams/${t.id}`}>{t.name}</Link></h3>
-              <p style={{ color: 'var(--text-muted)', margin: '8px 0 16px' }}>{t.description || 'No description'}</p>
+            <Card key={t.id}>
+              <h3 style={{ marginTop: 0, marginBottom: 8 }}>
+                <Link to={`/teams/${t.id}`} className="btn-link">
+                  {t.name}
+                </Link>
+              </h3>
+              <p style={{ color: 'var(--text-muted)', margin: '8px 0 16px', fontSize: '0.9rem' }}>
+                {t.description || 'No description'}
+              </p>
               <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between', alignItems: 'center' }}>
-                <span className="badge badge-medium">{t.member_count ?? 0} members</span>
-                {canManage && <button className="btn btn-danger btn-sm" onClick={() => handleDelete(t.id)}>Archive</button>}
+                <Badge variant="secondary">{t.member_count ?? 0} members</Badge>
+                {canManage && (
+                  <button className="btn btn-danger btn-sm" onClick={() => handleDelete(t.id)}>
+                    Archive
+                  </button>
+                )}
               </div>
-            </div>
+            </Card>
           ))}
         </div>
       )}
 
-      {showModal && (
-        <div className="modal-overlay" onClick={() => setShowModal(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
-            <h2>Create Team</h2>
-            <form onSubmit={handleCreate}>
-              <div className="form-group">
-                <label className="label">Name</label>
-                <input className="input" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required />
-              </div>
-              <div className="form-group">
-                <label className="label">Description</label>
-                <textarea className="textarea" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
-              </div>
-              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>Cancel</button>
-                <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'Creating…' : 'Create team'}</button>
-              </div>
-            </form>
+      <Modal
+        isOpen={showModal}
+        onClose={() => setShowModal(false)}
+        title="Create New Team"
+        size="md"
+      >
+        <form onSubmit={handleCreate}>
+          <FormSection>
+            <FormGroup label="Team Name" required>
+              <Input
+                value={form.name}
+                onChange={e => setForm({ ...form, name: e.target.value })}
+                placeholder="Enter team name"
+                required
+              />
+            </FormGroup>
+            <FormGroup label="Description">
+              <Textarea
+                value={form.description}
+                onChange={e => setForm({ ...form, description: e.target.value })}
+                placeholder="Describe your team..."
+                rows={4}
+              />
+            </FormGroup>
+          </FormSection>
+
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 24 }}>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => setShowModal(false)}
+            >
+              Cancel
+            </button>
+            <button type="submit" className="btn btn-primary">
+              Create Team
+            </button>
           </div>
-        </div>
-      )}
+        </form>
+      </Modal>
     </div>
   );
 }

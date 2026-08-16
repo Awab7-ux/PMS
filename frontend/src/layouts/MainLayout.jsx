@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { notificationApi, orgApi } from '../services/api';
 import { onRealtime } from '../services/realtime';
 import './MainLayout.css';
+import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 
 
 const NAV = [
@@ -136,7 +137,7 @@ export default function MainLayout() {
         <div className="sidebar-brand">
           <span className="brand-icon">P</span>
           <span className="sidebar-label">PMS</span>
-          <button type="button" className="sidebar-collapse" onClick={toggleCollapsed} aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}>{sidebarCollapsed ? '›' : '‹'}</button>
+          <button type="button" className="sidebar-collapse" onClick={toggleCollapsed} aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}><i className={`bi ${sidebarCollapsed ? 'bi-chevron-right' : 'bi-chevron-left'}`}></i></button>
         </div>
         {organization && (
           <div className="sidebar-org">{organization.name}</div>
@@ -173,19 +174,19 @@ export default function MainLayout() {
               <div className="profile-name">{user?.full_name || user?.username}</div>
               <div className="profile-email">{user?.email}</div>
             </div>
-            <button type="button" className="logout-button" onClick={handleLogout} aria-label="Log out">↪</button>
+            <button type="button" className="logout-button btn btn-sm" onClick={handleLogout} aria-label="Log out"><i className="bi bi-box-arrow-right" aria-hidden="true"></i></button>
           </div>
         </div>
       </aside>
 
       <div className="layout-main">
         <header className="header">
-          <button type="button" className="menu-toggle btn btn-secondary btn-sm" onClick={() => setSidebarOpen(!sidebarOpen)} aria-label="Toggle menu">☰</button>
+          <button type="button" className="menu-toggle btn btn-secondary btn-sm" onClick={() => setSidebarOpen(!sidebarOpen)} aria-label="Toggle menu"><i className="bi bi-list" aria-hidden="true"></i></button>
           <form onSubmit={handleSearch} className="header-search">
             <input className="input" placeholder="Search..." value={searchQ} onChange={e => setSearchQ(e.target.value)} aria-label="Global search" />
           </form>
           <div className="header-right"><span className={`connection-status ${connectionStatus}`} title={`Realtime ${connectionStatus}`}>{connectionStatus === 'connected' ? '● Live' : connectionStatus === 'reconnecting' ? '◌ Reconnecting' : '○ Offline'}</span>
-            <div className="notification-menu"><button type="button" className="header-notif" onClick={openNotification} aria-label="Notifications" aria-expanded={notificationOpen}>🔔 {unread > 0 && <span className="nav-badge">{unread > 99 ? '99+' : unread}</span>}</button>{notificationOpen && <div className="notification-panel" role="dialog" aria-label="Recent notifications"><div className="notification-panel-header"><strong>Notifications</strong>{unread > 0 && <button type="button" className="btn btn-secondary btn-sm" onClick={markAllRead}>Mark all read</button>}</div>{notificationLoading ? <div className="notification-panel-state">Loading notifications…</div> : notificationError ? <div className="notification-panel-state"><span>{notificationError}</span><button type="button" className="btn btn-secondary btn-sm" onClick={loadNotifications}>Retry</button></div> : notifications.length === 0 ? <div className="notification-panel-state">You’re all caught up.</div> : <div className="notification-list">{notifications.map(notification => <button type="button" key={notification.id} className={`notification-item ${notification.is_read ? '' : 'unread'}`} onClick={() => handleNotificationClick(notification)}><span className="notification-icon">{notification.event_type.includes('TASK') ? '✓' : notification.event_type.includes('TEAM') ? '👥' : '📁'}</span><span><strong>{notification.title}</strong><small>{notification.message}</small><em>{relativeTime(notification.created_at)}</em></span></button>)}</div>}<NavLink to="/notifications" className="notification-panel-footer" onClick={() => setNotificationOpen(false)}>View all notifications</NavLink></div>}</div>
+            <div className="notification-menu"><button type="button" className="header-notif" onClick={openNotification} aria-label="Notifications" aria-expanded={notificationOpen}><i className="bi bi-bell" aria-hidden="true"></i> {unread > 0 && <span className="nav-badge">{unread > 99 ? '99+' : unread}</span>}</button>{notificationOpen && <div className="notification-panel" role="dialog" aria-label="Recent notifications"><div className="notification-panel-header"><strong>Notifications</strong>{unread > 0 && <button type="button" className="btn btn-secondary btn-sm" onClick={markAllRead}>Mark all read</button>}</div>{notificationLoading ? <div className="notification-panel-state">Loading notifications…</div> : notificationError ? <div className="notification-panel-state"><span>{notificationError}</span><button type="button" className="btn btn-secondary btn-sm" onClick={loadNotifications}>Retry</button></div> : notifications.length === 0 ? <div className="notification-panel-state">You’re all caught up.</div> : <div className="notification-list">{notifications.map(notification => <button type="button" key={notification.id} className={`notification-item ${notification.is_read ? '' : 'unread'}`} onClick={() => handleNotificationClick(notification)}><span className="notification-icon">{notification.event_type && notification.event_type.includes('TASK') ? <i className="bi bi-check2-square" aria-hidden="true"></i> : notification.event_type && notification.event_type.includes('TEAM') ? <i className="bi bi-people-fill" aria-hidden="true"></i> : <i className="bi bi-kanban-fill" aria-hidden="true"></i>}</span><span><strong>{notification.title}</strong><small>{notification.message}</small><em>{relativeTime(notification.created_at)}</em></span></button>)}</div>}<NavLink to="/notifications" className="notification-panel-footer" onClick={() => setNotificationOpen(false)}>View all notifications</NavLink></div>}</div>
             <span className="user-name">{user?.full_name}</span>
             <button type="button" className="btn btn-secondary btn-sm" onClick={handleLogout}>Logout</button>
           </div>

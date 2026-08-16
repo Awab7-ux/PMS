@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { orgApi } from '../services/api';
+import { PageHeader, Card, LoadingState, EmptyState, Alert, Badge, Select } from '../components';
 
 export default function UsersPage() {
   const { orgId, user: currentUser } = useAuth();
@@ -30,37 +31,96 @@ export default function UsersPage() {
     try { await orgApi.removeMember(orgId, member.user_id); load(); } catch (err) { setError(err.message); }
   };
 
-  if (loading) return <div className="loader">Loading users...</div>;
+  if (loading) return <LoadingState message="Loading users..." />;
 
   return (
     <div>
-      <div className="page-header">
-        <div><h1>Organization members</h1><p>People with access to this workspace.</p></div>
-      </div>
+      <PageHeader
+        title="Organization members"
+        description="People with access to this workspace."
+        icon="👥"
+      />
 
-      {error && <div className="alert alert-error">{error}</div>}
+      {error && <Alert type="error" title="Error" message={error} onClose={() => setError('')} />}
 
-      {canManage && <div className="card" style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16 }}><div><h3 style={{ margin: 0 }}>Pending invitations</h3><p style={{ color: 'var(--text-muted)', marginBottom: 0 }}>{pendingInvitations} awaiting a response</p></div><Link className="btn btn-secondary" to="/invitations">Manage invitations</Link></div>}
+      {canManage && pendingInvitations > 0 && (
+        <Card style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, padding: 16 }}>
+          <div>
+            <h3 style={{ margin: 0 }}>Pending invitations</h3>
+            <p style={{ color: 'var(--text-muted)', marginBottom: 0, fontSize: '0.9rem' }}>
+              {pendingInvitations} awaiting a response
+            </p>
+          </div>
+          <Link className="btn btn-secondary" to="/invitations">
+            Manage invitations
+          </Link>
+        </Card>
+      )}
 
       {users.length === 0 ? (
-        <div className="card empty-state">No organization members found.</div>
+        <EmptyState
+          icon="👥"
+          title="No members yet"
+          message="This organization has no members."
+        />
       ) : (
-        <div className="card table-wrap">
-          <table>
-            <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Joined</th>{canManage && <th>Actions</th>}</tr></thead>
-            <tbody>
-              {users.map(u => (
-                <tr key={u.id}>
-                  <td>{u.user?.full_name}{u.user_id === currentUser?.id ? ' (you)' : ''}</td>
-                  <td>{u.user?.email}</td>
-                  <td>{canManage && !u.is_owner ? <select className="select" value={u.role || ''} onChange={e => changeRole(u, e.target.value)}><option>Project Manager</option><option>Team Member</option><option>Client</option></select> : <span className="badge badge-medium">{u.role}</span>}</td>
-                  <td>{u.joined_at ? new Date(u.joined_at).toLocaleDateString() : '—'}</td>
-                  {canManage && <td>{!u.is_owner && <button className="btn btn-danger btn-sm" onClick={() => remove(u)}>Remove</button>}</td>}
+        <Card>
+          <div className="table-responsive">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Email</th>
+                  <th>Role</th>
+                  <th>Joined</th>
+                  {canManage && <th>Actions</th>}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {users.map(u => (
+                  <tr key={u.id}>
+                    <td>
+                      {u.user?.full_name}
+                      {u.user_id === currentUser?.id && (
+                        <Badge variant="info" style={{ marginLeft: 8 }}>you</Badge>
+                      )}
+                    </td>
+                    <td>{u.user?.email}</td>
+                    <td>
+                      {canManage && !u.is_owner ? (
+                        <Select
+                          value={u.role || ''}
+                          onChange={e => changeRole(u, e.target.value)}
+                          options={[
+                            { value: 'Project Manager', label: 'Project Manager' },
+                            { value: 'Team Member', label: 'Team Member' },
+                            { value: 'Client', label: 'Client' }
+                          ]}
+                          style={{ minWidth: 140 }}
+                        />
+                      ) : (
+                        <Badge variant="secondary">{u.role}</Badge>
+                      )}
+                    </td>
+                    <td>{u.joined_at ? new Date(u.joined_at).toLocaleDateString() : '—'}</td>
+                    {canManage && (
+                      <td>
+                        {!u.is_owner && (
+                          <button
+                            className="btn btn-danger btn-sm"
+                            onClick={() => remove(u)}
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
       )}
     </div>
   );

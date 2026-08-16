@@ -3,6 +3,10 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { projectApi } from '../services/api';
 import { joinRoom, leaveRoom, onRealtime } from '../services/realtime';
+import { 
+  PageHeader, Card, Modal, ConfirmDialog, LoadingState, EmptyState, Alert, Badge,
+  Input, Select, Textarea, FormGroup, FormSection
+} from '../components';
 
 export default function ProjectsPage() {
   const { orgId } = useAuth();
@@ -12,7 +16,7 @@ export default function ProjectsPage() {
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ name: '', description: '', status: 'Planning', priority: 'Medium' });
   const [error, setError] = useState('');
-  const [saving, setSaving] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
 
   const load = () => {
     if (!orgId) { setLoading(false); return; }
@@ -36,94 +40,235 @@ export default function ProjectsPage() {
 
   const handleCreate = async (e) => {
     e.preventDefault();
-    setSaving(true); setError('');
     try {
       await projectApi.create({ ...form, organization_id: orgId });
-      setShowModal(false); setForm({ name: '', description: '', status: 'Planning', priority: 'Medium' }); load();
-    } catch (err) { setError(err.message || 'Unable to create project.'); } finally { setSaving(false); }
+      setShowModal(false);
+      setForm({ name: '', description: '', status: 'Planning', priority: 'Medium' });
+      load();
+    } catch (err) {
+      setError(err.message || 'Unable to create project.');
+    }
   };
 
   const handleDelete = async (id) => {
-    if (!confirm('Delete this project?')) return;
-    await projectApi.delete(id);
-    load();
+    try {
+      await projectApi.delete(id);
+      setDeleteConfirm(null);
+      load();
+    } catch (err) {
+      setError(err.message || 'Unable to delete project.');
+    }
   };
 
-  if (loading) return <div className="loader">Loading projects...</div>;
+  if (loading) return <LoadingState message="Loading projects..." />;
 
   return (
     <div>
-      <div className="page-header">
-        <div><h1>Projects</h1><p>Plan, track, and deliver work with confidence.</p></div>
-        <button className="btn btn-primary" onClick={() => setShowModal(true)}>+ New Project</button>
-      </div>
+      <PageHeader 
+        title="Projects"
+        description="Plan, track, and deliver work with confidence."
+        icon="📁"
+        action={
+          <button 
+            className="btn btn-primary"
+            onClick={() => setShowModal(true)}
+          >
+            + New Project
+          </button>
+        }
+      />
 
-      {error && <div className="alert alert-error">{error}</div>}
+      {error && (
+        <Alert 
+          type="error" 
+          title="Error"
+          message={error}
+          onClose={() => setError('')}
+        />
+      )}
 
       <div style={{ marginBottom: 16 }}>
-        <input className="input" placeholder="Search projects..." value={search} onChange={e => setSearch(e.target.value)} style={{ maxWidth: 400 }} />
+        <Input 
+          placeholder="Search projects..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          type="search"
+        />
       </div>
 
       {projects.length === 0 ? (
-        <div className="card empty-state">No projects found. Create your first project.</div>
+        <EmptyState 
+          icon="📁"
+          title="No projects yet"
+          message="Create your first project to get started."
+          action={
+            <button 
+              className="btn btn-primary"
+              onClick={() => setShowModal(true)}
+            >
+              Create First Project
+            </button>
+          }
+        />
       ) : (
-        <div className="card table-wrap">
-          <table>
-            <thead><tr><th>Name</th><th>Code</th><th>Status</th><th>Priority</th><th>Progress</th><th>Actions</th></tr></thead>
-            <tbody>
-              {projects.map(p => (
-                <tr key={p.id}>
-                  <td><Link to={`/projects/${p.id}`}>{p.name}</Link></td>
-                  <td>{p.code || '—'}</td>
-                  <td>{p.status}</td>
-                  <td><span className={`badge badge-${p.priority?.toLowerCase()}`}>{p.priority}</span></td>
-                  <td><div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><div className="progress" style={{ width: 88 }}><span style={{ width: `${p.progress_percent || 0}%` }} /></div>{p.progress_percent || 0}%</div></td>
-                  <td>
-                    <Link to={`/projects/${p.id}/kanban`} className="btn btn-secondary btn-sm" style={{ marginRight: 8 }}>Kanban</Link>
-                    <button className="btn btn-danger btn-sm" onClick={() => handleDelete(p.id)}>Delete</button>
-                  </td>
+        <Card>
+          <div className="table-responsive">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Code</th>
+                  <th>Status</th>
+                  <th>Priority</th>
+                  <th>Progress</th>
+                  <th>Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {projects.map(p => (
+                  <tr key={p.id}>
+                    <td>
+                      <Link to={`/projects/${p.id}`} className="btn-link">
+                        {p.name}
+                      </Link>
+                    </td>
+                    <td>{p.code || '—'}</td>
+                    <td>
+                      <Badge variant="secondary">{p.status}</Badge>
+                    </td>
+                    <td>
+                      <Badge variant={
+                        p.priority === 'Critical' ? 'danger' :
+                        p.priority === 'High' ? 'warning' :
+                        p.priority === 'Medium' ? 'info' :
+                        'secondary'
+                      }>
+                        {p.priority}
+                      </Badge>
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div className="progress" style={{ flex: 1, minWidth: 88 }}>
+                          <div style={{ 
+                            width: `${p.progress_percent || 0}%`,
+                            height: '4px',
+                            borderRadius: '2px',
+                            background: 'var(--primary)'
+                          }} />
+                        </div>
+                        <span style={{ minWidth: 40 }}>{p.progress_percent || 0}%</span>
+                      </div>
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <Link 
+                          to={`/projects/${p.id}/kanban`}
+                          className="btn btn-secondary btn-sm"
+                        >
+                          View
+                        </Link>
+                        <button 
+                          className="btn btn-danger btn-sm"
+                          onClick={() => setDeleteConfirm(p.id)}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
       )}
 
-      {showModal && (
-        <div className="modal-overlay" onClick={() => setShowModal(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
-            <h2>Create Project</h2>
-            <form onSubmit={handleCreate}>
-              <div className="form-group">
-                <label className="label">Name</label>
-                <input className="input" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required />
-              </div>
-              <div className="form-group">
-                <label className="label">Description</label>
-                <textarea className="textarea" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
-              </div>
-              <div className="form-row">
-                <div className="form-group">
-                  <label className="label">Status</label>
-                  <select className="select" value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}>
-                    {['Planning', 'Active', 'On Hold', 'Completed', 'Archived'].map(s => <option key={s}>{s}</option>)}
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label className="label">Priority</label>
-                  <select className="select" value={form.priority} onChange={e => setForm({ ...form, priority: e.target.value })}>
-                    {['Low', 'Medium', 'High', 'Critical'].map(s => <option key={s}>{s}</option>)}
-                  </select>
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>Cancel</button>
-                <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'Creating…' : 'Create project'}</button>
-              </div>
-            </form>
+      <Modal 
+        isOpen={showModal}
+        onClose={() => setShowModal(false)}
+        title="Create New Project"
+        size="lg"
+      >
+        <form onSubmit={handleCreate}>
+          <FormSection>
+            <FormGroup label="Project Name" required>
+              <Input 
+                value={form.name}
+                onChange={e => setForm({ ...form, name: e.target.value })}
+                placeholder="Enter project name"
+                required
+              />
+            </FormGroup>
+
+            <FormGroup label="Description">
+              <Textarea 
+                value={form.description}
+                onChange={e => setForm({ ...form, description: e.target.value })}
+                placeholder="Describe your project..."
+                rows={4}
+              />
+            </FormGroup>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+              <FormGroup label="Status" required>
+                <Select 
+                  value={form.status}
+                  onChange={e => setForm({ ...form, status: e.target.value })}
+                  options={[
+                    { value: 'Planning', label: 'Planning' },
+                    { value: 'Active', label: 'Active' },
+                    { value: 'On Hold', label: 'On Hold' },
+                    { value: 'Completed', label: 'Completed' },
+                    { value: 'Archived', label: 'Archived' }
+                  ]}
+                />
+              </FormGroup>
+
+              <FormGroup label="Priority" required>
+                <Select 
+                  value={form.priority}
+                  onChange={e => setForm({ ...form, priority: e.target.value })}
+                  options={[
+                    { value: 'Low', label: 'Low' },
+                    { value: 'Medium', label: 'Medium' },
+                    { value: 'High', label: 'High' },
+                    { value: 'Critical', label: 'Critical' }
+                  ]}
+                />
+              </FormGroup>
+            </div>
+          </FormSection>
+
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 24 }}>
+            <button 
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => setShowModal(false)}
+            >
+              Cancel
+            </button>
+            <button 
+              type="submit"
+              className="btn btn-primary"
+            >
+              Create Project
+            </button>
           </div>
-        </div>
-      )}
+        </form>
+      </Modal>
+
+      <ConfirmDialog
+        isOpen={deleteConfirm !== null}
+        title="Delete Project?"
+        message="This project and all associated data will be permanently deleted. This action cannot be undone."
+        confirmText="Delete"
+        cancelText="Cancel"
+        isDangerous
+        onConfirm={() => {
+          if (deleteConfirm) handleDelete(deleteConfirm);
+        }}
+        onCancel={() => setDeleteConfirm(null)}
+      />
     </div>
   );
 }
