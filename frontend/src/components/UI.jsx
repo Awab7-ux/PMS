@@ -2,6 +2,8 @@
  * Page header component
  */
 export function PageHeader({ title, description, action, icon }) {
+  const isBootstrapIcon = icon && icon.startsWith('bi-');
+  
   return (
     <div
       style={{
@@ -13,19 +15,20 @@ export function PageHeader({ title, description, action, icon }) {
       }}
     >
       <div>
-        {icon && (
+        {icon && isBootstrapIcon && (
           <div
             style={{
-              fontSize: '2.5rem',
+              fontSize: '1.5rem',
               marginBottom: 'var(--spacing-sm)',
               opacity: 0.8,
+              color: 'var(--primary)',
             }}
           >
-            {icon}
+            <i className={`bi ${icon}`}></i>
           </div>
         )}
-        <h1 style={{ marginBottom: 'var(--spacing-sm)' }}>{title}</h1>
-        {description && <p style={{ color: 'var(--text-muted)' }}>{description}</p>}
+        <h1 style={{ marginBottom: 'var(--spacing-sm)', fontWeight: 700, letterSpacing: '-0.02em' }}>{title}</h1>
+        {description && <p style={{ color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>{description}</p>}
       </div>
       {action && <div>{action}</div>}
     </div>

@@ -63,7 +63,7 @@ export default function DashboardPage() {
     <PageHeader 
       title={`Good morning, ${user?.full_name?.split(' ')[0] || 'there'}`}
       description="Here's what's happening across your workspace."
-      icon="👋"
+      icon="bi-hand-thumbs-up"
     />
     
     {error && (

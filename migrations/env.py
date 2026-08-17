@@ -36,6 +36,9 @@ from backend.app.models import (
     ActivityLog,
     AuthToken,
     Event,
+    Conversation,
+    ConversationMember,
+    Message,
 )
 
 target_metadata = db.metadata

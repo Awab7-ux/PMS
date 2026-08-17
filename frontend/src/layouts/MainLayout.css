@@ -11,8 +11,8 @@
 /* ===== SIDEBAR ===== */
 .sidebar {
   width: var(--sidebar-width);
-  background: var(--bg-card);
-  border-right: 1px solid var(--border);
+  background: var(--sidebar-bg);
+  border-right: 1px solid var(--sidebar-border);
   padding: var(--spacing-lg);
   display: flex;
   flex-direction: column;
@@ -21,6 +21,7 @@
   position: relative;
   overflow: hidden;
   overflow-y: auto;
+  color: var(--sidebar-text);
 }
 
 .sidebar.collapsed {
@@ -52,13 +53,13 @@
   font-weight: var(--font-weight-700);
   font-size: var(--text-base);
   flex-shrink: 0;
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
 }
 
 .sidebar-label {
   font-weight: var(--font-weight-700);
   font-size: var(--text-lg);
-  color: var(--text);
+  color: var(--sidebar-text);
   letter-spacing: -0.02em;
   white-space: nowrap;
 }
@@ -72,7 +73,7 @@
   background: transparent;
   border: 0;
   padding: var(--spacing-xs) var(--spacing-sm);
-  color: var(--text-muted);
+  color: var(--sidebar-text-muted);
   cursor: pointer;
   border-radius: var(--radius-md);
   transition: all var(--transition-fast);
@@ -84,8 +85,8 @@
 }
 
 .sidebar-collapse:hover {
-  background: var(--bg-hover);
-  color: var(--text);
+  background: var(--sidebar-bg-hover);
+  color: var(--sidebar-text);
 }
 
 .sidebar-collapse:focus-visible {
@@ -101,11 +102,11 @@
 /* Organization Name */
 .sidebar-org {
   font-size: var(--text-xs);
-  color: var(--text-muted);
+  color: var(--sidebar-text-muted);
   padding: var(--spacing-sm) var(--spacing-xs);
   margin: var(--spacing-md) 0;
   padding-bottom: var(--spacing-md);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--sidebar-border);
   font-weight: var(--font-weight-600);
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -129,7 +130,7 @@
   align-items: center;
   gap: var(--spacing-md);
   padding: 10px var(--spacing-sm);
-  color: var(--text-muted);
+  color: var(--sidebar-text-muted);
   border-radius: var(--radius-md);
   font-weight: var(--font-weight-500);
   font-size: var(--text-sm);
@@ -137,17 +138,24 @@
   position: relative;
   white-space: nowrap;
   line-height: 1.4;
+  text-decoration: none;
+  user-select: none;
 }
 
 .sidebar-nav a:hover {
-  background: var(--bg-hover);
-  color: var(--text-secondary);
-  border-color: var(--border);
+  background: var(--sidebar-bg-hover);
+  color: var(--sidebar-text);
+  border-color: transparent;
+}
+
+.sidebar-nav a:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
 }
 
 .sidebar-nav a.active {
-  background: linear-gradient(90deg, rgba(79, 70, 229, 0.1), transparent);
-  color: var(--primary);
+  background: linear-gradient(90deg, rgba(79, 70, 229, 0.2), transparent);
+  color: var(--sidebar-text-active);
   font-weight: var(--font-weight-600);
   border-color: transparent;
 }
@@ -164,7 +172,7 @@
 }
 
 .sidebar-nav a.active:hover {
-  background: linear-gradient(90deg, rgba(79, 70, 229, 0.15), transparent);
+  background: linear-gradient(90deg, rgba(79, 70, 229, 0.3), transparent);
   padding-left: var(--spacing-sm);
 }
 
@@ -200,7 +208,7 @@
 .sidebar-footer {
   margin-top: auto;
   padding-top: var(--spacing-md);
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--sidebar-border);
 }
 
 .profile-card {
@@ -213,7 +221,7 @@
 }
 
 .profile-card:hover {
-  background: var(--bg-hover);
+  background: var(--sidebar-bg-hover);
 }
 
 .profile-card .avatar {
@@ -233,7 +241,7 @@
 .profile-name {
   font-weight: var(--font-weight-700);
   font-size: var(--text-sm);
-  color: var(--text);
+  color: var(--sidebar-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -241,7 +249,7 @@
 
 .profile-email {
   font-size: var(--text-xs);
-  color: var(--text-muted);
+  color: var(--sidebar-text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -262,7 +270,7 @@
   margin-left: auto;
   background: transparent;
   border: 0;
-  color: var(--text-muted);
+  color: var(--sidebar-text-muted);
   cursor: pointer;
   padding: var(--spacing-xs);
   display: flex;
@@ -297,10 +305,10 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-lg);
-  padding: var(--spacing-md) var(--spacing-xl);
+  padding: 0 var(--spacing-xl);
   border-bottom: 1px solid var(--border);
   background: var(--bg-card);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  box-shadow: none;
 }
 
 .menu-toggle {
@@ -325,6 +333,7 @@
   border: 1px solid var(--border);
   color: var(--text);
   font-size: var(--text-sm);
+  transition: all var(--transition-fast);
 }
 
 .header-search .input::placeholder {
@@ -335,6 +344,7 @@
   background: var(--bg-card);
   border-color: var(--primary);
   outline: none;
+  box-shadow: inset 0 0 0 3px rgba(79, 70, 229, 0.1);
 }
 
 .header-right {
@@ -383,6 +393,7 @@
   transition: all var(--transition-fast);
   position: relative;
   color: var(--text-muted);
+  font-weight: var(--font-weight-500);
 }
 
 .header-notif:hover {
@@ -404,7 +415,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: 0;
-  box-shadow: var(--shadow-xl);
+  box-shadow: 0 20px 48px rgba(15, 23, 42, 0.2);
   z-index: 1000;
   max-height: 500px;
   display: flex;
@@ -473,6 +484,7 @@
 .notification-item.unread {
   background: linear-gradient(90deg, #eef2ff, transparent);
   border-color: #e6f0ff;
+  border-left: 3px solid var(--primary);
 }
 
 .notification-item.unread:hover {
@@ -547,12 +559,19 @@
   font-size: var(--text-sm);
   color: var(--text);
   white-space: nowrap;
+  display: none;
+}
+
+@media (min-width: 1200px) {
+  .user-name {
+    display: block;
+  }
 }
 
 /* Content Area */
 .content {
   flex: 1;
-  padding: var(--spacing-2xl) var(--spacing-xl);
+  padding: var(--spacing-2xl);
   overflow-y: auto;
   background: var(--bg);
 }

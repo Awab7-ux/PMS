@@ -19,19 +19,24 @@ const NAV = [
     icon: 'bi-kanban-fill',
   },
   {
-    to: '/tasks',
-    label: 'Tasks',
-    icon: 'bi-check2-square',
-  },
-  {
     to: '/teams',
     label: 'Teams',
     icon: 'bi-people-fill',
   },
   {
+    to: '/tasks',
+    label: 'Tasks',
+    icon: 'bi-check2-square',
+  },
+  {
     to: '/calendar',
     label: 'Calendar',
     icon: 'bi-calendar3',
+  },
+  {
+    to: '/chat',
+    label: 'Chat',
+    icon: 'bi-chat-dots',
   },
   {
     to: '/reports',

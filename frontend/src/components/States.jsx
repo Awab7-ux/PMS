@@ -4,7 +4,9 @@
 export function LoadingState({ message = 'Loading...' }) {
   return (
     <div className="empty-state">
-      <div className="spinner" aria-hidden="true"></div>
+      <div className="empty-state-icon" aria-hidden="true">
+        <i className="bi bi-hourglass-split spinner"></i>
+      </div>
       <p className="empty-state-text">{message}</p>
     </div>
   );
@@ -45,12 +47,28 @@ export function ErrorState({ title = 'Something went wrong', message = '', onRet
       {message && <p className="empty-state-text">{message}</p>}
       {onRetry && (
         <div className="mt-lg">
-          <button className="btn btn-primary btn-sm" onClick={onRetry}>
+          <button className="btn btn-primary btn-sm" onClick={onRetry} aria-label="Try again">
             <i className="bi bi-arrow-clockwise"></i>
             Try Again
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Success state component
+ */
+export function SuccessState({ title = 'Success', message = '', action = null }) {
+  return (
+    <div className="empty-state">
+      <div className="empty-state-icon success-icon" aria-hidden="true">
+        <i className="bi bi-check-circle"></i>
+      </div>
+      <h3 className="empty-state-title">{title}</h3>
+      {message && <p className="empty-state-text">{message}</p>}
+      {action && <div className="mt-lg">{action}</div>}
     </div>
   );
 }

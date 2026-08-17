@@ -25,6 +25,7 @@ const UsersPage = lazy(() => import('./pages/UsersPage'));
 const SearchPage = lazy(() => import('./pages/SearchPage'));
 const InvitationsPage = lazy(() => import('./pages/InvitationsPage'));
 const AcceptInvitationPage = lazy(() => import('./pages/AcceptInvitationPage'));
+const ChatPage = lazy(() => import('./components/ChatPage'));
 
 export default function App() {
   return (
@@ -57,6 +58,7 @@ export default function App() {
                 <Route path="users" element={<UsersPage />} />
                 <Route path="invitations" element={<InvitationsPage />} />
                 <Route path="search" element={<SearchPage />} />
+                <Route path="chat" element={<ChatPage />} />
               </Route>
 
               <Route path="*" element={<Navigate to="/dashboard" replace />} />

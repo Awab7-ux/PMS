@@ -197,4 +197,28 @@ export const searchApi = {
   global: (params) => apiRequest(`/search?${new URLSearchParams(params)}`),
 };
 
+export const conversationApi = {
+  list: (orgId, params = {}) => apiRequest(`/conversations?organization_id=${orgId}&${new URLSearchParams(params)}`),
+  get: (id) => apiRequest(`/conversations/${id}`),
+  createDirect: (data) => apiRequest('/conversations/direct', { method: 'POST', body: JSON.stringify(data) }),
+  createGroup: (data) => apiRequest('/conversations/group', { method: 'POST', body: JSON.stringify(data) }),
+  createProject: (projectId, data) => apiRequest(`/conversations/project/${projectId}`, { method: 'POST', body: JSON.stringify(data) }),
+  createTeam: (teamId, data) => apiRequest(`/conversations/team/${teamId}`, { method: 'POST', body: JSON.stringify(data) }),
+  update: (id, data) => apiRequest(`/conversations/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  delete: (id) => apiRequest(`/conversations/${id}`, { method: 'DELETE' }),
+  
+  // Members
+  listMembers: (id) => apiRequest(`/conversations/${id}/members`),
+  addMember: (id, userId) => apiRequest(`/conversations/${id}/members`, { method: 'POST', body: JSON.stringify({ user_id: userId }) }),
+  removeMember: (id, userId) => apiRequest(`/conversations/${id}/members/${userId}`, { method: 'DELETE' }),
+  
+  // Messages
+  getMessages: (id, params = {}) => apiRequest(`/conversations/${id}/messages?${new URLSearchParams(params)}`),
+  getMessagesSince: (id, afterMessageId, limit = 50) => apiRequest(`/conversations/${id}/messages?after=${afterMessageId}&limit=${limit}`),
+  sendMessage: (id, content) => apiRequest(`/conversations/${id}/messages`, { method: 'POST', body: JSON.stringify({ content }) }),
+  editMessage: (messageId, content) => apiRequest(`/conversations?message_id=${messageId}`, { method: 'PATCH', body: JSON.stringify({ content }) }),
+  deleteMessage: (messageId) => apiRequest(`/conversations?message_id=${messageId}`, { method: 'DELETE' }),
+  markAsRead: (id) => apiRequest(`/conversations/${id}/read`, { method: 'POST' }),
+};
+
 export { setTokens, getTokens, ApiError };
